@@ -25,6 +25,16 @@
         <div><p class="eyebrow">Staff Dashboard</p><h1 id="dashTitle">Overview</h1></div>
         <div class="toolbar">
           <button class="icon-button theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+          <select id="staffViewPreview" class="secondary-button" aria-label="Preview dashboard as staff role">
+            <option value="">Live permissions</option>
+            <option value="useradmin">Preview as User Admin</option>
+            <option value="usermod">Preview as User Mod</option>
+            <option value="playeradmin">Preview as Player Admin</option>
+            <option value="playermod">Preview as Player Mod</option>
+            <option value="tournamentadmin">Preview as Tournament Admin</option>
+            <option value="tournamentmod">Preview as Tournament Mod</option>
+          </select>
+          <button id="resetStaffViewPreview" class="secondary-button" type="button">Reset preview</button>
           <button id="switchUserView" class="secondary-button" type="button">User view</button>
           <button id="staffLogout" class="secondary-button" type="button">Logout</button>
         </div>

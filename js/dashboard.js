@@ -26,6 +26,7 @@
   const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole"];
   const teamRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2"];
   const staffRolePriority = ["superadmin", "useradmin", "playeradmin", "tournamentadmin", "usermod", "playermod", "tournamentmod"];
+  const previewRoleStorageKey = "tp-dashboard-preview-role";
   const tournamentStatuses = ["draft", "registration", "in_progress", "completed"];
   const matchStatuses = ["scheduled", "checkin_open", "live", "paused", "finished", "forfeit"];
   const audienceTypes = ["all", "users", "players", "staff", "role", "individual"];
@@ -50,9 +51,17 @@
     return [...new Set(values.filter(Boolean))];
   }
 
-  function staffRolesFor(profile = me()) {
-    const roles = uniqueValues([profile.staff_role, ...(Array.isArray(profile.staff_roles) ? profile.staff_roles : [])]);
+  function rawStaffRolesFor(profile = me()) {
+    const roles = uniqueValues([profile?.staff_role, ...(Array.isArray(profile?.staff_roles) ? profile.staff_roles : [])]);
     return roles.sort((a, b) => staffRolePriority.indexOf(a) - staffRolePriority.indexOf(b));
+  }
+
+  function staffRolesFor(profile = me()) {
+    const previewRole = localStorage.getItem(previewRoleStorageKey) || "";
+    if (previewRole && rawStaffRolesFor(profile).includes("superadmin")) {
+      return [previewRole].filter(Boolean);
+    }
+    return rawStaffRolesFor(profile);
   }
 
   function playerRolesFor(profile = {}) {
@@ -62,6 +71,25 @@
   function hasStaffRole(profile, ...roles) {
     const current = staffRolesFor(profile);
     return roles.some((role) => current.includes(role));
+  }
+
+  function hasRealStaffRole(profile, ...roles) {
+    const current = rawStaffRolesFor(profile);
+    return roles.some((role) => current.includes(role));
+  }
+
+  function previewRoleLabel() {
+    const previewRole = localStorage.getItem(previewRoleStorageKey) || "";
+    if (!previewRole) return "";
+    const previewMap = {
+      useradmin: "User Admin",
+      usermod: "User Mod",
+      playeradmin: "Player Admin",
+      playermod: "Player Mod",
+      tournamentadmin: "Tournament Admin",
+      tournamentmod: "Tournament Mod"
+    };
+    return `Preview: ${previewMap[previewRole] || previewRole}`;
   }
 
   function primaryStaffRole(profile = me()) {
@@ -160,6 +188,18 @@
 
   function canEditBroadcast(post) {
     return canDeleteBroadcast(post);
+  }
+
+  function actionDepartment(action = "") {
+    const value = String(action).toLowerCase();
+    if (/user|password|profile|appeal/.test(value)) return "User";
+    if (/team|player|member|approval/.test(value)) return "Player";
+    if (/tournament|match|bracket|registration/.test(value)) return "Tournament";
+    return "General";
+  }
+
+  function actionLabel(action = "") {
+    return String(action || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   function optionList(options, selected, emptyLabel) {
@@ -1778,11 +1818,110 @@
   }
 
   async function audit() {
-    const { data, error } = await db().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(150);
-    U().qs("#dashContent").innerHTML = error ? `<p class="message error">${U().escapeHtml(error.message)}</p>` : `
-      <section class="table-wrap"><table><thead><tr><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody>
-      ${(data || []).map((log) => `<tr><td>${U().escapeHtml(log.action)}</td><td>${U().escapeHtml(log.target_id || "-")}</td><td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td><td>${U().formatDate(log.created_at)}</td></tr>`).join("")}
-      </tbody></table></section>`;
+    const root = U().qs("#dashContent");
+    root.innerHTML = '<p class="muted">Loading audit activity...</p>';
+
+    const [{ data, error }, { data: profiles }] = await Promise.all([
+      db().from("audit_logs").select("*, profiles!admin_id(id, full_name, username, role, staff_role, staff_roles)").order("created_at", { ascending: false }).limit(250),
+      db().from("profiles").select("id, full_name, username, role, staff_role, staff_roles").limit(500)
+    ]);
+
+    if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
+
+    const actorMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
+    const currentRole = staffRolesFor(me());
+    const isSuperAdmin = currentRole.includes("superadmin");
+
+    const baseLogs = (data || []).filter((log) => {
+      const actor = actorMap[log.admin_id] || {};
+      if (!isSuperAdmin && hasRealStaffRole(actor, "superadmin")) return false;
+      const department = actionDepartment(log.action);
+      if (!isSuperAdmin) {
+        if (currentRole.includes("useradmin") || currentRole.includes("usermod")) return department === "User";
+        if (currentRole.includes("playeradmin") || currentRole.includes("playermod")) return department === "Player";
+        if (currentRole.includes("tournamentadmin") || currentRole.includes("tournamentmod")) return department === "Tournament";
+      }
+      return true;
+    });
+
+    function renderRows(logs) {
+      const teamActivity = logs.filter((log) => /team|player|member|approval/.test(String(log.action).toLowerCase()));
+      const actorSummary = [...new Set(logs.map((log) => actorMap[log.admin_id]?.full_name || "Unknown"))].slice(0, 8);
+      root.innerHTML = `
+        <section class="card-grid" style="margin-bottom:16px;">
+          <article class="item-card"><strong>${logs.length}</strong><span>Visible audit entries</span></article>
+          <article class="item-card"><strong>${teamActivity.length}</strong><span>Team activity items</span></article>
+          <article class="item-card"><strong>${actorSummary.length}</strong><span>Visible actors</span></article>
+        </section>
+        <section class="wide-panel" style="margin-bottom:16px;">
+          <div class="section-heading"><h2>Audit Filters</h2><span class="pill good">${isSuperAdmin ? "Superadmin view" : "Scoped view"}</span></div>
+          <div class="filter-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end;">
+            <label class="field"><input id="auditSearch" type="search" placeholder=" "><span>Search</span></label>
+            <label class="field"><select id="auditDepartmentFilter"><option value="all">All departments</option><option value="User">User</option><option value="Player">Player</option><option value="Tournament">Tournament</option><option value="General">General</option></select><span>Department</span></label>
+            <label class="field"><select id="auditActorFilter"><option value="all">All actors</option>${[...new Set(baseLogs.map((log) => actorMap[log.admin_id]?.full_name || actorMap[log.admin_id]?.username || "Unknown"))].map((name) => `<option value="${U().escapeHtml(name)}">${U().escapeHtml(name)}</option>`).join("")}</select><span>Actor</span></label>
+          </div>
+          <div class="pill-row" style="margin-top:10px;">
+            <span class="pill">Visible: ${isSuperAdmin ? "All departments" : "Department scoped"}</span>
+            <span class="pill">Superadmin activity: ${isSuperAdmin ? "Visible" : "Hidden"}</span>
+            <span class="pill">Team activity: ${teamActivity.length}</span>
+          </div>
+        </section>
+        <section class="wide-panel" style="margin-bottom:16px;">
+          <div class="section-heading"><h2>Team Activity</h2><span class="pill warn">Department tracking</span></div>
+          <div class="list-stack">${teamActivity.slice(0, 8).map((log) => {
+            const actor = actorMap[log.admin_id] || {};
+            return `<article class="item-card"><strong>${U().escapeHtml(actionLabel(log.action))}</strong><p class="muted">${U().escapeHtml(actor.full_name || "Unknown actor")} · ${U().formatDate(log.created_at)}</p><p>${U().escapeHtml(JSON.stringify(log.details || {}).slice(0, 160))}</p></article>`;
+          }).join("") || '<p class="muted">No team activity in the current filter.</p>'}</div>
+        </section>
+        <section class="table-wrap"><table><thead><tr><th>Actor</th><th>Department</th><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody id="auditRows">${filteredLogs.map((log) => {
+          const actor = actorMap[log.admin_id] || {};
+          const staffRoles = [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean);
+          return `<tr>
+            <td>${U().escapeHtml(actor.full_name || actor.username || "Unknown")}<br><span class="muted">${U().escapeHtml(staffRoles.join(", ") || actor.role || "user")}</span></td>
+            <td>${U().escapeHtml(actionDepartment(log.action))}</td>
+            <td>${U().escapeHtml(actionLabel(log.action))}</td>
+            <td>${U().escapeHtml(log.target_id || "-")}</td>
+            <td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td>
+            <td>${U().formatDate(log.created_at)}</td>
+          </tr>`;
+        }).join("") || '<tr><td colspan="6"><p class="muted">No audit entries match the current filters.</p></td></tr>'}</tbody></table></section>`;
+
+      const searchInput = U().qs("#auditSearch");
+      const departmentFilter = U().qs("#auditDepartmentFilter");
+      const actorFilter = U().qs("#auditActorFilter");
+      const applyFilters = () => {
+        const query = (searchInput?.value || "").toLowerCase();
+        const department = departmentFilter?.value || "all";
+        const actor = actorFilter?.value || "all";
+        const filtered = baseLogs.filter((log) => {
+          const actorName = actorMap[log.admin_id]?.full_name || actorMap[log.admin_id]?.username || "Unknown";
+          const text = `${actionLabel(log.action)} ${actorName} ${JSON.stringify(log.details || "")} ${log.target_id || ""}`.toLowerCase();
+          const matchesQuery = !query || text.includes(query);
+          const matchesDepartment = department === "all" || actionDepartment(log.action) === department;
+          const matchesActor = actor === "all" || actorName === actor;
+          return matchesQuery && matchesDepartment && matchesActor;
+        });
+        const rows = U().qs("#auditRows");
+        if (!rows) return;
+        rows.innerHTML = filtered.map((log) => {
+          const actor = actorMap[log.admin_id] || {};
+          const staffRoles = [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean);
+          return `<tr>
+            <td>${U().escapeHtml(actor.full_name || actor.username || "Unknown")}<br><span class="muted">${U().escapeHtml(staffRoles.join(", ") || actor.role || "user")}</span></td>
+            <td>${U().escapeHtml(actionDepartment(log.action))}</td>
+            <td>${U().escapeHtml(actionLabel(log.action))}</td>
+            <td>${U().escapeHtml(log.target_id || "-")}</td>
+            <td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td>
+            <td>${U().formatDate(log.created_at)}</td>
+          </tr>`;
+        }).join("") || '<tr><td colspan="6"><p class="muted">No audit entries match the current filters.</p></td></tr>';
+      };
+      searchInput?.addEventListener("input", applyFilters);
+      departmentFilter?.addEventListener("change", applyFilters);
+      actorFilter?.addEventListener("change", applyFilters);
+    }
+
+    renderRows(baseLogs);
   }
 
   async function activity() {
@@ -1790,11 +1929,61 @@
     U().qs("#activityPanel").innerHTML = `<h2>Activity</h2><div class="list-stack">${(data || []).map((a) => `<div><strong>${U().escapeHtml(a.action)}</strong><p class="muted">${U().formatDate(a.created_at)}</p></div>`).join("") || '<p class="muted">No activity yet.</p>'}</div>`;
   }
 
+  function updatePreviewBadge() {
+    U().qs("#staffPreviewLabel")?.remove();
+    const labelText = previewRoleLabel();
+    if (!labelText) return;
+    const label = document.createElement("span");
+    label.id = "staffPreviewLabel";
+    label.className = "pill warn";
+    label.textContent = labelText;
+    document.querySelector(".toolbar")?.prepend(label);
+  }
+
+  function setupPreviewControls() {
+    const previewSelect = U().qs("#staffViewPreview");
+    const resetButton = U().qs("#resetStaffViewPreview");
+    if (!previewSelect || !resetButton) return;
+
+    const isSuperAdmin = rawStaffRolesFor(me()).includes("superadmin");
+    previewSelect.disabled = !isSuperAdmin;
+    resetButton.disabled = !isSuperAdmin;
+
+    if (!isSuperAdmin) {
+      localStorage.removeItem(previewRoleStorageKey);
+      previewSelect.value = "";
+      updatePreviewBadge();
+      return;
+    }
+
+    const saved = localStorage.getItem(previewRoleStorageKey) || "";
+    previewSelect.value = saved;
+    updatePreviewBadge();
+
+    previewSelect.addEventListener("change", () => {
+      const value = previewSelect.value;
+      if (value) localStorage.setItem(previewRoleStorageKey, value);
+      else localStorage.removeItem(previewRoleStorageKey);
+      renderSidebar();
+      loadModule(activeModule);
+      updatePreviewBadge();
+    });
+
+    resetButton.addEventListener("click", () => {
+      localStorage.removeItem(previewRoleStorageKey);
+      previewSelect.value = "";
+      renderSidebar();
+      loadModule(activeModule);
+      updatePreviewBadge();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
     if (document.body.dataset.page !== "dashboard" || !window.currentProfile) return;
     renderSidebar();
     activity();
     startRealtime();
+    setupPreviewControls();
     U().qs("#switchUserView")?.addEventListener("click", () => window.open("feed.html", "_blank"));
     U().qs("#staffLogout")?.addEventListener("click", () => window.TPAuth.logout());
   }, 350));

@@ -173,7 +173,8 @@ body.dark .theme-toggle::before,
 
 .field {
   position: relative;
-  display: block;
+  display: grid;
+  gap: 6px;
 }
 
 .field input,
@@ -198,12 +199,12 @@ body.dark .theme-toggle::before,
 }
 
 .field span {
-  position: absolute;
-  left: 14px;
-  top: 15px;
+  position: static;
   color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
   pointer-events: none;
-  transition: transform 150ms ease, font-size 150ms ease, color 150ms ease;
+  transition: color 150ms ease;
 }
 
 .field input:focus + span,
@@ -217,9 +218,23 @@ body.dark .theme-toggle::before,
   color: var(--accent);
 }
 
-.two-grid, .three-grid, .form-grid {
+.two-grid, .three-grid, .form-grid, .filter-grid {
   display: grid;
   gap: 14px;
+}
+
+.filter-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+}
+
+.filter-grid .field {
+  min-width: 0;
+}
+
+.filter-grid .field input,
+.filter-grid .field select {
+  min-height: 44px;
 }
 .two-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .three-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
