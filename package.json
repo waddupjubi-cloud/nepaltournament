@@ -7,6 +7,7 @@
     "import:temp": "node scripts/import-temp-data.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.1"
+    "@supabase/supabase-js": "^2.49.1",
+    "ws": "^8.21.0"
   }
 }
