@@ -68,21 +68,23 @@ begin
     alter table public.profiles disable trigger guard_profile_privilege_changes;
   end if;
 
-  insert into public.profiles (id, full_name, username, role, staff_role, is_verified, is_player_approved)
-  values (new_user_id, 'Super Admin', public.generate_username('Super Admin'), 'superadmin', 'superadmin', true, true)
+  insert into public.profiles (id, full_name, username, role, staff_role, staff_roles, player_roles, is_verified, is_player_approved)
+  values (new_user_id, 'Super Admin', public.generate_username('Super Admin'), 'superadmin', 'superadmin', array['superadmin'], array['multirole'], true, true)
   on conflict (id) do update
   set
     full_name = 'Super Admin',
     username = coalesce(public.profiles.username, excluded.username),
     role = 'superadmin',
     staff_role = 'superadmin',
+    staff_roles = array['superadmin'],
+    player_roles = array['multirole'],
     is_verified = true,
     is_player_approved = true,
     updated_at = now();
 
   if old_user_id is not null and old_user_id <> new_user_id then
     update public.profiles
-    set role = 'user', staff_role = null, updated_at = now()
+    set role = 'user', staff_role = null, staff_roles = '{}', updated_at = now()
     where id = old_user_id;
   end if;
 

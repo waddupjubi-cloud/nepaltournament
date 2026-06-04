@@ -28,7 +28,7 @@
     detail.innerHTML = `
       <div class="section-heading">
         <div><p class="eyebrow">${U.escapeHtml(tournament.status)}</p><h1>${U.escapeHtml(tournament.name)}</h1></div>
-        <button id="registerTournament" class="secondary-button" type="button">Register team</button>
+        ${window.currentProfile ? '<button id="registerTournament" class="secondary-button" type="button">Request ticket</button>' : ""}
       </div>
       <p>${U.escapeHtml(tournament.description || "")}</p>
       <div class="pill-row"><span class="pill">${U.escapeHtml(tournament.game || "Game")}</span><span class="pill">${tournament.team_capacity} teams</span><span class="pill">${U.formatDate(tournament.start_date)}</span></div>`;
@@ -58,8 +58,8 @@
       <div class="item-card">
         <strong>${U.escapeHtml(m.round_name)}</strong>
         <p>${U.escapeHtml(m.team_a_name)} ${m.team_a_score ?? "-"} vs ${m.team_b_score ?? "-"} ${U.escapeHtml(m.team_b_name)}</p>
-        <span class="pill">${U.escapeHtml(m.status)}</span>
-      </div>`).join("") || '<p class="muted">No saved matches yet. The preview bracket is generated from tournament capacity.</p>';
+        <div class="pill-row"><span class="pill">${U.escapeHtml(m.status)}</span><span class="pill">${U.escapeHtml(m.phase || "phase")}</span><span class="pill">BO${m.best_of || 1}</span></div>
+      </div>`).join("") || '<p class="muted">No tie sheet yet. Approved tickets will appear here automatically.</p>';
   }
 
   async function registerTeam(tournamentId) {
@@ -67,14 +67,21 @@
     const { data: teams } = await window.tpSupabase.from("teams").select("team_id, team_name").eq("team_leader_id", window.currentProfile.id).eq("status", "approved");
     if (!teams?.length) return alert("You need to lead an approved team before registering.");
     const team = teams[0];
-    if (!confirm(`Create tournament registration for ${team.team_name}?`)) return;
+    const { data: existing } = await window.tpSupabase
+      .from("tournament_registrations")
+      .select("status")
+      .eq("tournament_id", tournamentId)
+      .eq("team_id", team.team_id)
+      .maybeSingle();
+    if (existing) return alert(`Your tournament ticket is already ${existing.status}.`);
+    if (!confirm(`Request a tournament ticket for ${team.team_name}?`)) return;
     const { error } = await window.tpSupabase.from("tournament_registrations").insert({
       tournament_id: tournamentId,
       team_id: team.team_id,
       requested_by: window.currentProfile.id
     });
     if (error) alert(error.message);
-    else alert(`Tournament registration created for ${team.team_name}.`);
+    else alert(`Tournament ticket requested for ${team.team_name}.`);
   }
 
   function startTournamentListRealtime() {

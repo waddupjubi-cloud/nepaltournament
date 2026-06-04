@@ -57,6 +57,7 @@
     const nav = qs(".top-nav");
     if (!nav) return;
     const page = document.body.dataset.page;
+    const staffRoles = [profile?.staff_role, ...(Array.isArray(profile?.staff_roles) ? profile.staff_roles : [])].filter(Boolean);
     const isPlayer = ["player", "superadmin"].includes(profile?.role) || profile?.is_player_approved;
     const links = [
       ["feed", "feed.html", "fa-house", "Feed"],
@@ -77,7 +78,7 @@
         `).join("")}
       </nav>
       <div class="toolbar">
-        ${profile?.staff_role ? '<a class="secondary-button" href="dashboard.html">Staff</a>' : ""}
+        ${staffRoles.length ? '<a class="secondary-button" href="dashboard.html">Staff</a>' : ""}
         <button class="icon-button theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
         <button id="logoutButton" class="secondary-button" type="button">Logout</button>
       </div>`;
@@ -110,6 +111,7 @@
 
   function rolePills(values) {
     const list = Array.isArray(values) ? values : String(values || "").split(",").filter(Boolean);
+    if (!list.length) return "";
     return `<div class="pill-row">${list.map((role) => `<span class="pill">${escapeHtml(role)}</span>`).join("")}</div>`;
   }
 

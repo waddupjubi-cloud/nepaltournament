@@ -7,6 +7,7 @@ Tournament Players is a static HTML, CSS, and vanilla JavaScript esports platfor
 - User login, registration, email OTP verification, and session handling.
 - Separate staff login for Superadmin, Admin, and Moderator roles.
 - User feed, profile editing, player appeals, teams, team chat, tournaments, live brackets, and staff dashboard.
+- Tournament team leaders request tickets; tournament staff approve tickets, track pending/approved/rejected counts, and the MLBB tie sheet fills the first playable phase automatically.
 - Supabase schema with RLS policies for profiles, teams, tournaments, matches, notifications, messages, support tickets, and audit logs.
 - Light theme and dark theme with `localStorage` persistence.
 
@@ -56,12 +57,12 @@ Then open `http://localhost:8080`.
 - Normal users use [index.html](index.html).
 - Staff users use [staff.html](staff.html).
 - Login accepts either email or the generated lowercase username, such as `biju1`.
-- The same account can have a user role and a staff role.
+- The same account can have a user role, player roles, and multiple staff permissions.
 - Staff can open the dashboard from [dashboard.html](dashboard.html), then switch to user view.
 
 ## 5. Important Limitations
 
-This project intentionally has no custom backend. That keeps hosting simple, but it means password resets, changing Auth email, and setting Auth custom claims must be done through Supabase's dashboard or Edge Functions if you add them later. The app uses `profiles.staff_role` and RLS helper functions for authorization.
+This project is mostly static frontend code. Real Auth user creation and password updates go through the `admin-users` Supabase Edge Function. Authorization uses `profiles.staff_role` for backward compatibility plus `profiles.staff_roles` for multiple staff permissions.
 
 ## 6. Import Temp Teams And Staff
 
@@ -100,6 +101,14 @@ Then the workflow in [.github/workflows/import-temp-data.yml](.github/workflows/
 
 If you already ran the original schema, run this one-time SQL patch in Supabase SQL Editor:
 
+[supabase/tournament-role-format.sql](supabase/tournament-role-format.sql)
+
+For richer player flip-card fields like favorite hero, motto, tagline, likes, dislikes, and favorite quote, run:
+
+[supabase/player-profile-details.sql](supabase/player-profile-details.sql)
+
+Then run the upgraded dashboard CRUD policies:
+
 [supabase/dashboard-crud-policies.sql](supabase/dashboard-crud-policies.sql)
 
 Also run the realtime patch:
@@ -130,8 +139,8 @@ This unlocks the upgraded dashboard permissions:
 
 - Superadmin can manage all departments and delete non-superadmin profiles.
 - UserAdmin can approve player appeals and assign UserMod.
-- PlayerAdmin can manage teams and assign PlayerMod.
-- TournamentAdmin can manage tournaments and assign TournamentMod.
+- PlayerAdmin can manage teams, delete teams, assign PlayerMod, and update player roles such as EXP, JG, GD, MD, RM, Coach, SB1, SB2, or Multirole.
+- TournamentAdmin/TournamentMod can review tournament ticket requests and generate/update the MLBB tie sheet from approved tickets.
 - Moderators get department-specific update tools without admin promotion powers.
 
 ## 8. Deploy Superadmin Auth Tools
@@ -176,4 +185,3 @@ Then [.github/workflows/deploy-supabase-functions.yml](.github/workflows/deploy-
 - `scripts/import-temp-data.mjs`: imports temporary JSON into Supabase.
 - `supabase/functions/admin-users`: Superadmin-only Auth user creation/deletion/password reset.
 - `supabase/schema.sql`, `supabase/seed.sql`: database setup.
-

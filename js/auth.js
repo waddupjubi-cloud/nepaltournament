@@ -39,7 +39,8 @@
       return null;
     }
     const profile = await getProfile(session.user.id);
-    if (!profile.staff_role) {
+    const staffRoles = [profile.staff_role, ...(Array.isArray(profile.staff_roles) ? profile.staff_roles : [])].filter(Boolean);
+    if (!staffRoles.length) {
       location.href = "feed.html";
       return null;
     }
@@ -220,7 +221,8 @@
         });
         if (error) return U.setMessage("#staffMessage", error.message, "error");
         const profile = await getProfile(data.user.id);
-        if (!profile.staff_role) {
+        const staffRoles = [profile.staff_role, ...(Array.isArray(profile.staff_roles) ? profile.staff_roles : [])].filter(Boolean);
+        if (!staffRoles.length) {
           await db().auth.signOut();
           return U.setMessage("#staffMessage", "No staff privileges. Run seed.sql after creating the superadmin user.", "error");
         }

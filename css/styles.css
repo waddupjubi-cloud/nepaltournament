@@ -231,6 +231,14 @@ body.dark .theme-toggle::before,
   gap: 10px;
   color: var(--text-muted);
 }
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
 
 .message {
   min-height: 24px;
@@ -309,6 +317,98 @@ body.dark .theme-toggle::before,
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
 }
+.stat-card,
+.data-card {
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.stat-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  border: 1px solid var(--border);
+}
+.stat-card i { color: var(--accent); font-size: 1.35rem; }
+.stat-card span { color: var(--text-muted); font-weight: 800; }
+.stat-card strong {
+  grid-column: 1 / -1;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  line-height: 1;
+}
+.browser-grid,
+.mini-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+.data-card,
+.mini-card,
+.flip-face {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.data-card {
+  display: grid;
+  gap: 12px;
+  min-height: 180px;
+}
+.data-card.static-card { cursor: default; }
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  gap: 8px;
+}
+.metric-grid span {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+.metric-grid strong { font-size: 1.35rem; }
+.metric-grid small { color: var(--text-muted); font-weight: 800; }
+.detail-grid {
+  display: grid;
+  gap: 16px;
+}
+.detail-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.detail-list div {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.detail-list dt { color: var(--text-muted); font-weight: 800; }
+.detail-list dd { margin: 0; overflow-wrap: anywhere; }
+.flip-card {
+  min-height: 330px;
+  perspective: 1100px;
+  cursor: pointer;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  min-height: 330px;
+  transition: transform 220ms ease;
+  transform-style: preserve-3d;
+}
+.flip-card.is-flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-face {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  backface-visibility: hidden;
+}
+.flip-back { transform: rotateY(180deg); }
 
 .pill-row, .role-grid {
   display: flex;
@@ -341,7 +441,7 @@ body.dark .theme-toggle::before,
   animation: fadeIn 160ms ease;
 }
 .modal {
-  width: min(640px, 100%);
+  width: min(980px, 100%);
   max-height: min(760px, 92vh);
   overflow: auto;
   background: var(--card-bg);

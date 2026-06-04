@@ -11,7 +11,7 @@ declare
   caller_staff text;
 begin
   caller_staff := public.current_staff_role();
-  if caller_staff not in ('superadmin', 'playeradmin') then
+  if not public.is_staff(array['superadmin', 'playeradmin']) then
     raise exception 'Only Superadmin or PlayerAdmin can delete teams.';
   end if;
 

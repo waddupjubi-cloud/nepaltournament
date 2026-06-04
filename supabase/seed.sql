@@ -12,6 +12,8 @@ set
   username = coalesce(username, public.generate_username('Super Admin')),
   role = 'superadmin',
   staff_role = 'superadmin',
+  staff_roles = array['superadmin'],
+  player_roles = array['multirole'],
   is_verified = true,
   is_player_approved = true,
   updated_at = now()

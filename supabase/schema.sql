@@ -36,13 +36,23 @@ create table if not exists public.profiles (
   game_id text,
   server_id text,
   bio text,
+  favorite_hero text,
+  favorite_quote text,
+  motto text,
+  tagline text,
+  likes text,
+  dislikes text,
   role public.profile_role not null default 'user',
   staff_role public.staff_role,
+  staff_roles text[] not null default '{}',
+  player_roles text[] not null default '{}',
   is_verified boolean not null default false,
   is_player_approved boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint superadmin_staff_role check ((role = 'superadmin' and staff_role = 'superadmin') or role <> 'superadmin')
+  constraint superadmin_staff_role check ((role = 'superadmin' and staff_role = 'superadmin') or role <> 'superadmin'),
+  constraint profiles_staff_roles_check check (staff_roles <@ array['usermod','playermod','tournamentmod','useradmin','playeradmin','tournamentadmin','superadmin']),
+  constraint profiles_player_roles_check check (player_roles <@ array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole'])
 );
 
 create table if not exists public.player_appeals (
@@ -125,6 +135,10 @@ create table if not exists public.matches (
   tournament_id uuid not null references public.tournaments(tournament_id) on delete cascade,
   round_name text not null,
   round_number integer,
+  phase text,
+  best_of integer not null default 1,
+  bracket_position integer,
+  group_name text,
   team_a_id uuid references public.teams(team_id),
   team_b_id uuid references public.teams(team_id),
   team_a_score integer default 0,
@@ -238,6 +252,7 @@ create index if not exists profiles_staff_role_idx on public.profiles(staff_role
 create unique index if not exists profiles_username_unique on public.profiles(username);
 create index if not exists teams_status_idx on public.teams(status);
 create index if not exists matches_tournament_idx on public.matches(tournament_id);
+create index if not exists matches_phase_idx on public.matches(tournament_id, phase, round_number);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
 create index if not exists messages_team_idx on public.messages(team_id, created_at);
 create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id);
@@ -430,9 +445,24 @@ alter table public.profiles alter column username set not null;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
 
+create or replace function public.current_staff_roles()
+returns text[] language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select array_agg(distinct role_name)
+    from public.profiles p
+    cross join lateral unnest(coalesce(p.staff_roles, '{}'::text[]) || array[p.staff_role::text]) role_name
+    where p.id = auth.uid()
+      and role_name is not null
+      and role_name <> ''
+  ), '{}'::text[]);
+$$;
+
 create or replace function public.current_staff_role()
 returns text language sql stable security definer set search_path = public as $$
-  select staff_role::text from public.profiles where id = auth.uid();
+  select coalesce(
+    (select 'superadmin' where 'superadmin' = any(public.current_staff_roles())),
+    (select role_name from unnest(public.current_staff_roles()) role_name limit 1)
+  );
 $$;
 
 create or replace function public.current_role()
@@ -442,7 +472,7 @@ $$;
 
 create or replace function public.is_staff(required text[])
 returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(public.current_staff_role() = any(required), false);
+  select coalesce(public.current_staff_roles() && required, false);
 $$;
 
 create or replace function public.is_team_member(target_team uuid, target_user uuid)
@@ -457,7 +487,12 @@ $$;
 create or replace function public.prevent_superadmin_role_change()
 returns trigger language plpgsql as $$
 begin
-  if old.staff_role = 'superadmin' and (new.staff_role is distinct from old.staff_role or new.role is distinct from old.role) then
+  if (old.staff_role = 'superadmin' or 'superadmin' = any(coalesce(old.staff_roles, '{}'::text[])))
+    and (
+      new.staff_role is distinct from old.staff_role
+      or new.role is distinct from old.role
+      or new.staff_roles is distinct from old.staff_roles
+    ) then
     raise exception 'The superadmin role is protected.';
   end if;
   return new;
@@ -473,6 +508,8 @@ begin
   if auth.uid() = old.id and not public.is_staff(array['superadmin','useradmin','playeradmin','tournamentadmin']) then
     if new.role is distinct from old.role
       or new.staff_role is distinct from old.staff_role
+      or new.staff_roles is distinct from old.staff_roles
+      or new.player_roles is distinct from old.player_roles
       or new.is_player_approved is distinct from old.is_player_approved
       or new.is_verified is distinct from old.is_verified then
       raise exception 'Users cannot change their own privileges.';
@@ -637,47 +674,73 @@ create policy "audit insert" on public.audit_logs for insert with check (public.
 create or replace function public.guard_profile_privilege_changes()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  caller_staff text;
+  caller_staff_roles text[];
+  new_staff_roles text[];
+  old_staff_roles text[];
 begin
   if auth.role() = 'service_role' then
     return new;
   end if;
 
-  caller_staff := public.current_staff_role();
+  caller_staff_roles := public.current_staff_roles();
+  new_staff_roles := coalesce(new.staff_roles, '{}'::text[]);
+  old_staff_roles := coalesce(old.staff_roles, '{}'::text[]);
 
-  if old.staff_role = 'superadmin' and (new.staff_role is distinct from old.staff_role or new.role is distinct from old.role) then
+  if (old.staff_role = 'superadmin' or 'superadmin' = any(old_staff_roles))
+    and (
+      new.staff_role is distinct from old.staff_role
+      or new.role is distinct from old.role
+      or new_staff_roles is distinct from old_staff_roles
+    ) then
     raise exception 'Superadmin accounts are protected.';
   end if;
 
   if new.role is not distinct from old.role
     and new.staff_role is not distinct from old.staff_role
+    and new_staff_roles is not distinct from old_staff_roles
+    and coalesce(new.player_roles, '{}'::text[]) is not distinct from coalesce(old.player_roles, '{}'::text[])
     and new.is_player_approved is not distinct from old.is_player_approved
     and new.is_verified is not distinct from old.is_verified then
     return new;
   end if;
 
-  if caller_staff = 'superadmin' then
+  if 'superadmin' = any(caller_staff_roles) then
     return new;
   end if;
 
-  if new.staff_role is distinct from old.staff_role then
-    if caller_staff = 'useradmin' and coalesce(old.staff_role::text, '') in ('', 'usermod') and coalesce(new.staff_role::text, '') in ('', 'usermod') then
+  if new.staff_role is distinct from old.staff_role or new_staff_roles is distinct from old_staff_roles then
+    if 'useradmin' = any(caller_staff_roles)
+      and coalesce(old.staff_role::text, '') in ('', 'usermod')
+      and coalesce(new.staff_role::text, '') in ('', 'usermod')
+      and new_staff_roles <@ array['usermod'] then
       return new;
-    elsif caller_staff = 'playeradmin' and coalesce(old.staff_role::text, '') in ('', 'playermod') and coalesce(new.staff_role::text, '') in ('', 'playermod') then
+    elsif 'playeradmin' = any(caller_staff_roles)
+      and coalesce(old.staff_role::text, '') in ('', 'playermod')
+      and coalesce(new.staff_role::text, '') in ('', 'playermod')
+      and new_staff_roles <@ array['playermod'] then
       return new;
-    elsif caller_staff = 'tournamentadmin' and coalesce(old.staff_role::text, '') in ('', 'tournamentmod') and coalesce(new.staff_role::text, '') in ('', 'tournamentmod') then
+    elsif 'tournamentadmin' = any(caller_staff_roles)
+      and coalesce(old.staff_role::text, '') in ('', 'tournamentmod')
+      and coalesce(new.staff_role::text, '') in ('', 'tournamentmod')
+      and new_staff_roles <@ array['tournamentmod'] then
       return new;
     else
       raise exception 'You cannot assign that staff role.';
     end if;
   end if;
 
-  if (new.role is distinct from old.role or new.is_player_approved is distinct from old.is_player_approved)
-    and caller_staff not in ('useradmin', 'superadmin') then
+  if (new.role is distinct from old.role
+      or new.is_player_approved is distinct from old.is_player_approved)
+    and not public.is_staff(array['useradmin', 'superadmin']) then
     raise exception 'Only UserAdmin or Superadmin can approve player role changes.';
   end if;
 
-  if new.is_verified is distinct from old.is_verified and caller_staff not in ('useradmin', 'superadmin') then
+  if coalesce(new.player_roles, '{}'::text[]) is distinct from coalesce(old.player_roles, '{}'::text[])
+    and not public.is_staff(array['useradmin', 'playeradmin', 'superadmin']) then
+    raise exception 'Only PlayerAdmin, UserAdmin, or Superadmin can change player roles.';
+  end if;
+
+  if new.is_verified is distinct from old.is_verified and not public.is_staff(array['useradmin', 'superadmin']) then
     raise exception 'Only UserAdmin or Superadmin can change verification state.';
   end if;
 
@@ -709,7 +772,7 @@ declare
   caller_staff text;
 begin
   caller_staff := public.current_staff_role();
-  if caller_staff not in ('superadmin', 'playeradmin') then
+  if not public.is_staff(array['superadmin', 'playeradmin']) then
     raise exception 'Only Superadmin or PlayerAdmin can delete teams.';
   end if;
 

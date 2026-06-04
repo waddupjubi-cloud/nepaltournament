@@ -9,6 +9,21 @@ const corsHeaders = {
 
 type AdminAction = "createUser" | "deleteUser" | "updatePassword";
 const staffRoles = ["usermod", "playermod", "tournamentmod", "useradmin", "playeradmin", "tournamentadmin"];
+const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole"];
+
+function uniqueStrings(values: unknown[], allowed?: string[]) {
+  const result = [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+  return allowed ? result.filter((value) => allowed.includes(value)) : result;
+}
+
+function profileStaffRoles(profile: any) {
+  return uniqueStrings([profile?.staff_role, ...(Array.isArray(profile?.staff_roles) ? profile.staff_roles : [])]);
+}
+
+function hasStaffRole(profile: any, ...roles: string[]) {
+  const current = profileStaffRoles(profile);
+  return roles.some((role) => current.includes(role));
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -56,20 +71,21 @@ serve(async (req) => {
 
   const { data: callerProfile, error: profileError } = await callerClient
     .from("profiles")
-    .select("id, staff_role")
+    .select("id, staff_role, staff_roles")
     .eq("id", userData.user.id)
     .single();
-  if (profileError || !callerProfile?.staff_role) return json({ error: "Only staff can manage Auth users." }, 403);
+  if (profileError || !profileStaffRoles(callerProfile).length) return json({ error: "Only staff can manage Auth users." }, 403);
 
-  const canCreateUser = callerProfile.staff_role === "superadmin" || callerProfile.staff_role === "useradmin";
-  const canDeleteUser = callerProfile.staff_role === "superadmin";
+  const canCreateUser = hasStaffRole(callerProfile, "superadmin", "useradmin");
+  const canDeleteUser = hasStaffRole(callerProfile, "superadmin");
   const canResetPassword = async (targetUserId: string) => {
-    if (callerProfile.staff_role === "superadmin") return true;
-    if (!["useradmin", "usermod"].includes(callerProfile.staff_role)) return false;
-    const { data: target } = await admin.from("profiles").select("staff_role").eq("id", targetUserId).maybeSingle();
-    if (target?.staff_role === "superadmin") return false;
-    if (callerProfile.staff_role === "useradmin") return !target?.staff_role || target.staff_role === "usermod";
-    return !target?.staff_role;
+    if (hasStaffRole(callerProfile, "superadmin")) return true;
+    if (!hasStaffRole(callerProfile, "useradmin", "usermod")) return false;
+    const { data: target } = await admin.from("profiles").select("staff_role, staff_roles").eq("id", targetUserId).maybeSingle();
+    const targetRoles = profileStaffRoles(target);
+    if (targetRoles.includes("superadmin")) return false;
+    if (hasStaffRole(callerProfile, "useradmin")) return targetRoles.length === 0 || targetRoles.every((role) => role === "usermod");
+    return targetRoles.length === 0;
   };
 
   const body = await req.json();
@@ -82,13 +98,21 @@ serve(async (req) => {
     const fullName = String(body.full_name || "").trim();
     const ign = String(body.ign || "").trim();
     const role = body.role === "player" ? "player" : "user";
-    const staffRole = body.staff_role || null;
+    const requestedStaffRoles = uniqueStrings([
+      ...(Array.isArray(body.staff_roles) ? body.staff_roles : []),
+      body.staff_role
+    ]);
+    const staffRolesSelected = uniqueStrings([
+      ...(Array.isArray(body.staff_roles) ? body.staff_roles : []),
+      body.staff_role
+    ], staffRoles);
+    const staffRole = staffRolesSelected[0] || null;
+    const playerRolesSelected = role === "player" ? uniqueStrings(Array.isArray(body.player_roles) ? body.player_roles : [], playerRoles) : [];
 
     if (!email || !password || !fullName) return json({ error: "Email, password, and full name are required." }, 400);
     if (password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
-    if (staffRole === "superadmin") return json({ error: "Create additional superadmins manually and deliberately." }, 400);
-    if (staffRole && !staffRoles.includes(staffRole)) return json({ error: "Invalid staff role." }, 400);
-    if (callerProfile.staff_role === "useradmin" && staffRole && staffRole !== "usermod") {
+    if (requestedStaffRoles.includes("superadmin")) return json({ error: "Create additional superadmins manually and deliberately." }, 400);
+    if (hasStaffRole(callerProfile, "useradmin") && !hasStaffRole(callerProfile, "superadmin") && staffRolesSelected.some((item) => item !== "usermod")) {
       return json({ error: "UserAdmin can only assign UserMod." }, 403);
     }
 
@@ -115,6 +139,8 @@ serve(async (req) => {
       ign,
       role,
       staff_role: staffRole,
+      staff_roles: staffRolesSelected,
+      player_roles: playerRolesSelected,
       is_verified: true,
       is_player_approved: role === "player"
     }, { onConflict: "id" });
@@ -124,7 +150,7 @@ serve(async (req) => {
       admin_id: callerProfile.id,
       action: "edge_create_user",
       target_id: userId,
-      details: { email, username, role, staff_role: staffRole }
+      details: { email, username, role, staff_roles: staffRolesSelected, player_roles: playerRolesSelected }
     });
 
     return json({ ok: true, user_id: userId, username });
@@ -136,8 +162,8 @@ serve(async (req) => {
     if (!userId) return json({ error: "user_id is required." }, 400);
     if (userId === callerProfile.id) return json({ error: "Superadmin cannot delete themselves." }, 400);
 
-    const { data: targetProfile } = await admin.from("profiles").select("staff_role").eq("id", userId).maybeSingle();
-    if (targetProfile?.staff_role === "superadmin") return json({ error: "Superadmin accounts are protected." }, 400);
+    const { data: targetProfile } = await admin.from("profiles").select("staff_role, staff_roles").eq("id", userId).maybeSingle();
+    if (hasStaffRole(targetProfile, "superadmin")) return json({ error: "Superadmin accounts are protected." }, 400);
 
     const deleted = await admin.auth.admin.deleteUser(userId);
     if (deleted.error) return json({ error: deleted.error.message }, 400);

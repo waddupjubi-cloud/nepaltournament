@@ -82,6 +82,8 @@ async function ensureAuthUsers(seedUsers) {
       ign: seed.ign,
       role: seed.role || "user",
       staff_role: seed.staff_role || null,
+      staff_roles: seed.staff_roles || (seed.staff_role ? [seed.staff_role] : []),
+      player_roles: seed.player_roles || (seed.role === "player" ? ["multirole"] : []),
       is_verified: true,
       is_player_approved: seed.role === "player" || Boolean(seed.staff_role?.includes("player"))
     };

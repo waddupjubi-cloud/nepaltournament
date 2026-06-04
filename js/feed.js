@@ -53,14 +53,15 @@
     const root = U.qs("#profileSummary");
     const p = window.currentProfile;
     if (!root || !p) return;
+    const staffRoles = [p.staff_role, ...(Array.isArray(p.staff_roles) ? p.staff_roles : [])].filter(Boolean);
     root.innerHTML = `
       <h2>${U.escapeHtml(p.full_name)}</h2>
       <p class="muted">@${U.escapeHtml(p.username || "username")} - ${U.escapeHtml(p.ign || "No IGN set")}</p>
       <div class="pill-row">
         <span class="pill good">${U.escapeHtml(p.role)}</span>
-        ${p.staff_role ? `<span class="pill">${U.escapeHtml(p.staff_role)}</span>` : ""}
+        ${[...new Set(staffRoles)].map((role) => `<span class="pill">${U.escapeHtml(role)}</span>`).join("")}
       </div>
-      ${p.staff_role ? '<p class="message success">You have staff privileges. Open the Staff button in the nav.</p>' : ""}`;
+      ${staffRoles.length ? '<p class="message success">You have staff privileges. Open the Staff button in the nav.</p>' : ""}`;
   }
 
   function initRealtime() {
