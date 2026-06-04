@@ -149,18 +149,23 @@
     const U = window.TPUtils;
     U.qs("#staffLoginForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      U.setMessage("#staffMessage", "Checking staff privileges...");
-      const { data, error } = await db().auth.signInWithPassword({
-        email: U.qs("#staffEmail").value.trim(),
-        password: U.qs("#staffPassword").value
-      });
-      if (error) return U.setMessage("#staffMessage", error.message, "error");
-      const profile = await getProfile(data.user.id);
-      if (!profile.staff_role) {
-        await db().auth.signOut();
-        return U.setMessage("#staffMessage", "No staff privileges.", "error");
+      try {
+        U.setMessage("#staffMessage", "Checking staff privileges...");
+        const { data, error } = await db().auth.signInWithPassword({
+          email: U.qs("#staffEmail").value.trim(),
+          password: U.qs("#staffPassword").value
+        });
+        if (error) return U.setMessage("#staffMessage", error.message, "error");
+        const profile = await getProfile(data.user.id);
+        if (!profile.staff_role) {
+          await db().auth.signOut();
+          return U.setMessage("#staffMessage", "No staff privileges. Run seed.sql after creating the superadmin user.", "error");
+        }
+        location.href = "dashboard.html";
+      } catch (error) {
+        console.error(error);
+        U.setMessage("#staffMessage", error.message || "Could not check staff privileges.", "error");
       }
-      location.href = "dashboard.html";
     });
   }
 

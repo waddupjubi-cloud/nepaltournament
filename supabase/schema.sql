@@ -233,6 +233,17 @@ create index if not exists matches_tournament_idx on public.matches(tournament_i
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
 create index if not exists messages_team_idx on public.messages(team_id, created_at);
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant select on all tables in schema public to anon;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on all functions in schema public to authenticated;
+
+alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public grant select on tables to anon;
+alter default privileges in schema public grant usage, select on sequences to authenticated;
+alter default privileges in schema public grant execute on functions to authenticated;
+
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
 begin
