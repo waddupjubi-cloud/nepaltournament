@@ -161,7 +161,7 @@
         const username = await generateUsername(fullName);
         if (!confirm(`Create account for ${fullName} with username ${username}?`)) return;
         U.setMessage("#authMessage", "Creating account and sending OTP...");
-        const { error } = await db().auth.signUp({
+        const { data: signUpData, error: signUpError } = await db().auth.signUp({
           email,
           password,
           options: {
@@ -177,13 +177,23 @@
             }
           }
         });
-        if (error) return U.setMessage("#authMessage", error.message, "error");
+        if (signUpError) return U.setMessage("#authMessage", signUpError.message, "error");
+
+        const { error: otpError } = await db().auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: window.TP_CONFIG.SITE_URL,
+            shouldCreateUser: false
+          }
+        });
+        if (otpError) return U.setMessage("#authMessage", otpError.message, "error");
+
         U.qs("#otpEmail").value = email;
         registerForm.classList.add("hidden");
         loginForm.classList.add("hidden");
         otpForm.classList.remove("hidden");
-        U.setMessage("#authMessage", `Account created. OTP sent. Username: ${username}`, "success");
-        alert(`Account created. Your username is ${username}. Enter the OTP to finish verification.`);
+        U.setMessage("#authMessage", `Account created. OTP email sent to ${email}.`, "success");
+        alert(`Account created. Your OTP email has been sent to ${email}. Enter the code to finish verification.`);
       } catch (error) {
         U.setMessage("#authMessage", error.message, "error");
       }
@@ -196,7 +206,7 @@
         const { data, error } = await db().auth.verifyOtp({
           email: U.qs("#otpEmail").value.trim(),
           token: U.qs("#otpToken").value.trim(),
-          type: "signup"
+          type: "email"
         });
         if (error) return U.setMessage("#authMessage", error.message, "error");
         const profile = await createProfileFromMetadata(data.user);
