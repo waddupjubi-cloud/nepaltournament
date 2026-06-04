@@ -1873,7 +1873,7 @@
             return `<article class="item-card"><strong>${U().escapeHtml(actionLabel(log.action))}</strong><p class="muted">${U().escapeHtml(actor.full_name || "Unknown actor")} · ${U().formatDate(log.created_at)}</p><p>${U().escapeHtml(JSON.stringify(log.details || {}).slice(0, 160))}</p></article>`;
           }).join("") || '<p class="muted">No team activity in the current filter.</p>'}</div>
         </section>
-        <section class="table-wrap"><table><thead><tr><th>Actor</th><th>Department</th><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody id="auditRows">${filteredLogs.map((log) => {
+        <section class="table-wrap"><table><thead><tr><th>Actor</th><th>Department</th><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody id="auditRows">${logs.map((log) => {
           const actor = actorMap[log.admin_id] || {};
           const staffRoles = [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean);
           return `<tr>
@@ -1884,7 +1884,7 @@
             <td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td>
             <td>${U().formatDate(log.created_at)}</td>
           </tr>`;
-        }).join("") || '<tr><td colspan="6"><p class="muted">No audit entries match the current filters.</p></td></tr>'}</tbody></table></section>`;
+        }).join("")}</tbody></table></section>`;
 
       const searchInput = U().qs("#auditSearch");
       const departmentFilter = U().qs("#auditDepartmentFilter");
