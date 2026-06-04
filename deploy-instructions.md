@@ -47,7 +47,7 @@ bucket_id = 'team-logos' and auth.role() = 'authenticated'
 - Create and seed the first superadmin.
 - Confirm email OTP works.
 - Test `index.html`, `staff.html`, and `dashboard.html`.
-- Change the seeded superadmin password after first login.
+- Change the seeded superadmin password before going public.
 
 ## Deploy Edge Function
 

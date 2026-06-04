@@ -1,8 +1,8 @@
 -- Seed data after schema.sql.
 -- Create the first superadmin user in Supabase Auth first:
 -- Dashboard > Authentication > Add user
--- Email: super@tournament.com
--- Password: ChangeMe123!
+-- Email: bzumarhajn2@gmail.com
+-- Password: #Batman007
 -- Mark "Email confirmed".
 -- Then run this SQL.
 
@@ -15,7 +15,7 @@ set
   is_player_approved = true,
   updated_at = now()
 where id = (
-  select id from auth.users where email = 'super@tournament.com' limit 1
+  select id from auth.users where email = 'bzumarhajn2@gmail.com' limit 1
 );
 
 insert into public.feed_posts (author_id, author_role, title, content, is_pinned)

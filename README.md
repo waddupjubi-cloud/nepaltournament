@@ -18,10 +18,14 @@ Tournament Players is a static HTML, CSS, and vanilla JavaScript esports platfor
 4. In Authentication settings, enable email confirmations.
 5. In Storage, create a public bucket named `team-logos`.
 6. Create the first Auth user manually:
-   - Email: `super@tournament.com`
-   - Password: `ChangeMe123!`
+   - Email: `bzumarhajn2@gmail.com`
+   - Password: `#Batman007`
    - Mark email as confirmed.
 7. Run [supabase/seed.sql](supabase/seed.sql).
+
+If you already created the old `super@tournament.com` account, run this instead:
+
+[supabase/change-superadmin-credentials.sql](supabase/change-superadmin-credentials.sql)
 
 ## 2. Configure Frontend
 
