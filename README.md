@@ -126,8 +126,8 @@ Creating or deleting real Supabase Auth users with passwords cannot be done safe
 Deploy it with the Supabase CLI:
 
 ```powershell
-supabase login
-supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz
+npx supabase login
+npx supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz --use-api
 ```
 
 If the dashboard says `Failed to send a request to the Edge Function`, the function is not deployed yet. In the current project, the endpoint should be:
@@ -135,6 +135,8 @@ If the dashboard says `Failed to send a request to the Edge Function`, the funct
 ```text
 https://zxrqfnrfshnvrnvuujmz.supabase.co/functions/v1/admin-users
 ```
+
+On this Windows project, use `npx supabase` instead of plain `supabase` unless you installed the CLI globally.
 
 For GitHub auto-deploy, add this repository secret:
 

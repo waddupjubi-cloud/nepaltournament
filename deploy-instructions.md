@@ -55,8 +55,8 @@ bucket_id = 'team-logos' and auth.role() = 'authenticated'
 The Superadmin dashboard can create users with passwords only after this function is deployed:
 
 ```powershell
-supabase login
-supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz
+npx supabase login
+npx supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz --use-api
 ```
 
 If the dashboard still says `Failed to send a request to the Edge Function`, open Supabase Dashboard > Edge Functions and confirm `admin-users` appears there. A missing function returns `404 Not Found`.
