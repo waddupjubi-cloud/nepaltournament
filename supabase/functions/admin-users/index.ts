@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 type AdminAction = "createUser" | "deleteUser" | "updatePassword";
+const staffRoles = ["usermod", "playermod", "tournamentmod", "useradmin", "playeradmin", "tournamentadmin"];
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -44,12 +45,24 @@ serve(async (req) => {
     .select("id, staff_role")
     .eq("id", userData.user.id)
     .single();
-  if (profileError || callerProfile?.staff_role !== "superadmin") return json({ error: "Only Superadmin can manage Auth users." }, 403);
+  if (profileError || !callerProfile?.staff_role) return json({ error: "Only staff can manage Auth users." }, 403);
+
+  const canCreateUser = callerProfile.staff_role === "superadmin" || callerProfile.staff_role === "useradmin";
+  const canDeleteUser = callerProfile.staff_role === "superadmin";
+  const canResetPassword = async (targetUserId: string) => {
+    if (callerProfile.staff_role === "superadmin") return true;
+    if (!["useradmin", "usermod"].includes(callerProfile.staff_role)) return false;
+    const { data: target } = await admin.from("profiles").select("staff_role").eq("id", targetUserId).maybeSingle();
+    if (target?.staff_role === "superadmin") return false;
+    if (callerProfile.staff_role === "useradmin") return !target?.staff_role || target.staff_role === "usermod";
+    return !target?.staff_role;
+  };
 
   const body = await req.json();
   const action = body.action as AdminAction;
 
   if (action === "createUser") {
+    if (!canCreateUser) return json({ error: "Only Superadmin or UserAdmin can create Auth users." }, 403);
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     const fullName = String(body.full_name || "").trim();
@@ -60,6 +73,10 @@ serve(async (req) => {
     if (!email || !password || !fullName) return json({ error: "Email, password, and full name are required." }, 400);
     if (password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
     if (staffRole === "superadmin") return json({ error: "Create additional superadmins manually and deliberately." }, 400);
+    if (staffRole && !staffRoles.includes(staffRole)) return json({ error: "Invalid staff role." }, 400);
+    if (callerProfile.staff_role === "useradmin" && staffRole && staffRole !== "usermod") {
+      return json({ error: "UserAdmin can only assign UserMod." }, 403);
+    }
 
     const created = await admin.auth.admin.createUser({
       email,
@@ -92,6 +109,7 @@ serve(async (req) => {
   }
 
   if (action === "deleteUser") {
+    if (!canDeleteUser) return json({ error: "Only Superadmin can delete Auth users." }, 403);
     const userId = String(body.user_id || "");
     if (!userId) return json({ error: "user_id is required." }, 400);
     if (userId === callerProfile.id) return json({ error: "Superadmin cannot delete themselves." }, 400);
@@ -116,6 +134,7 @@ serve(async (req) => {
     const userId = String(body.user_id || "");
     const password = String(body.password || "");
     if (!userId || password.length < 8) return json({ error: "A user and a password of at least 8 characters are required." }, 400);
+    if (!(await canResetPassword(userId))) return json({ error: "You cannot reset this user's password." }, 403);
 
     const updated = await admin.auth.admin.updateUserById(userId, { password });
     if (updated.error) return json({ error: updated.error.message }, 400);

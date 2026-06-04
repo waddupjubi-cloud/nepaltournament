@@ -43,6 +43,7 @@ bucket_id = 'team-logos' and auth.role() = 'authenticated'
 - Run `supabase/schema.sql`.
 - If this is an existing database, run `supabase/dashboard-crud-policies.sql`.
 - If this is an existing database, run `supabase/enable-realtime.sql`.
+- If team deletion fails, run `supabase/fix-team-delete.sql`.
 - Deploy the `admin-users` Edge Function for Superadmin Auth CRUD.
 - Create and seed the first superadmin.
 - Confirm email OTP works.
@@ -57,6 +58,8 @@ The Superadmin dashboard can create users with passwords only after this functio
 supabase login
 supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz
 ```
+
+If the dashboard still says `Failed to send a request to the Edge Function`, open Supabase Dashboard > Edge Functions and confirm `admin-users` appears there. A missing function returns `404 Not Found`.
 
 For GitHub Actions deployment, create a repository secret named `SUPABASE_ACCESS_TOKEN`.
 

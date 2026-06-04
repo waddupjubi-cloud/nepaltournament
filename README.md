@@ -105,6 +105,10 @@ Also run the realtime patch:
 
 [supabase/enable-realtime.sql](supabase/enable-realtime.sql)
 
+If team deletion fails in Player Management, run:
+
+[supabase/fix-team-delete.sql](supabase/fix-team-delete.sql)
+
 This unlocks the upgraded dashboard permissions:
 
 - Superadmin can manage all departments and delete non-superadmin profiles.
@@ -124,6 +128,12 @@ Deploy it with the Supabase CLI:
 ```powershell
 supabase login
 supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz
+```
+
+If the dashboard says `Failed to send a request to the Edge Function`, the function is not deployed yet. In the current project, the endpoint should be:
+
+```text
+https://zxrqfnrfshnvrnvuujmz.supabase.co/functions/v1/admin-users
 ```
 
 For GitHub auto-deploy, add this repository secret:

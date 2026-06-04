@@ -43,7 +43,7 @@
   }
 
   function canCreateUsers() {
-    return hasRole("superadmin");
+    return hasRole("superadmin", "useradmin");
   }
 
   function canEditBasicUsers() {
@@ -56,6 +56,14 @@
 
   function canDeleteUsers(profile) {
     return hasRole("superadmin") && profile.id !== me().id && profile.staff_role !== "superadmin";
+  }
+
+  function canResetPassword(profile) {
+    if (profile.staff_role === "superadmin") return false;
+    if (hasRole("superadmin")) return true;
+    if (hasRole("useradmin")) return !profile.staff_role || profile.staff_role === "usermod";
+    if (hasRole("usermod")) return !profile.staff_role;
+    return false;
   }
 
   function canAssignStaffRole(role) {
@@ -121,7 +129,7 @@
       headers: { Authorization: `Bearer ${token}` }
     });
     if (error) {
-      throw new Error(`${error.message}. Deploy the Supabase Edge Function in supabase/functions/admin-users if this keeps happening.`);
+      throw new Error(`${error.message}. The admin-users Edge Function is not reachable yet. Deploy it with: supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz`);
     }
     if (data?.error) throw new Error(data.error);
     return data;
@@ -214,14 +222,14 @@
 
   function renderCreateUserPanel() {
     return `<section class="wide-panel">
-      <div class="section-heading"><h2>Create Auth User</h2><span class="pill good">Superadmin</span></div>
+      <div class="section-heading"><h2>Create Auth User</h2><span class="pill good">${hasRole("superadmin") ? "Superadmin" : "UserAdmin"}</span></div>
       <form id="createUserForm" class="form-grid">
         <label class="field"><input id="newUserName" required placeholder=" "><span>Full name</span></label>
         <label class="field"><input id="newUserEmail" type="email" required placeholder=" "><span>Email</span></label>
         <label class="field"><input id="newUserPassword" type="password" minlength="8" required placeholder=" "><span>Password</span></label>
         <label class="field"><input id="newUserIgn" placeholder=" "><span>IGN</span></label>
         <label class="field"><select id="newUserRole">${optionList(userRoles, "user")}</select><span>User role</span></label>
-        <label class="field"><select id="newUserStaffRole">${optionList(staffRoles, "", "No staff role")}</select><span>Staff role</span></label>
+        <label class="field"><select id="newUserStaffRole">${optionList(staffRoleChoicesForCurrentUser(), "", "No staff role")}</select><span>Staff role</span></label>
         <button class="primary-button" type="submit">Create user</button>
         <p id="createUserMessage" class="message"></p>
       </form>
@@ -241,7 +249,7 @@
   function renderUserActions(p) {
     const actions = [];
     if (canEditBasicUsers()) actions.push(`<button class="secondary-button" type="button" data-edit-user="${p.id}">Edit</button>`);
-    if (hasRole("superadmin") && p.staff_role !== "superadmin") actions.push(`<button class="secondary-button" type="button" data-reset-password="${p.id}">Password</button>`);
+    if (canResetPassword(p)) actions.push(`<button class="secondary-button" type="button" data-reset-password="${p.id}">Password</button>`);
     if (p.staff_role !== "superadmin" && staffRoleChoicesForCurrentUser().length) {
       actions.push(`
         <select data-staff-role="${p.id}">
@@ -467,8 +475,8 @@
     U().qsa("[data-edit-team]").forEach((button) => button.addEventListener("click", () => openTeamEditor(teams.find((t) => t.team_id === button.dataset.editTeam), playersList)));
     U().qsa("[data-delete-team]").forEach((button) => button.addEventListener("click", async () => {
       if (!confirm("Delete this team?")) return;
-      const { error } = await db().from("teams").delete().eq("team_id", button.dataset.deleteTeam);
-      if (error) alert(error.message);
+      const { error } = await db().rpc("admin_delete_team", { target_team_id: button.dataset.deleteTeam });
+      if (error) alert(`${error.message}. Run supabase/dashboard-crud-policies.sql in Supabase SQL Editor if this keeps happening.`);
       else {
         await logAction("delete_team", button.dataset.deleteTeam, {});
         players();
@@ -515,8 +523,7 @@
         renderRows();
       }));
     };
-    U().qs("#addRosterPlayer").innerHTML = optionList(playersList.map((p) => p.id), "", "Select player")
-      .replaceAll(/<option value="([^"]+)"/g, (match, id) => `${match} data-label="${U().escapeHtml(playerName(id))}"`);
+    U().qs("#addRosterPlayer").innerHTML = optionList(playersList.map((p) => p.id), "", "Select player");
     Array.from(U().qs("#addRosterPlayer").options).forEach((option) => {
       if (option.value) option.textContent = playerName(option.value);
     });
