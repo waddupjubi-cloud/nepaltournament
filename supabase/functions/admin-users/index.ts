@@ -17,6 +17,20 @@ function json(body: unknown, status = 200) {
   });
 }
 
+async function usernameFor(admin: any, userId: string, displayName: string) {
+  const { data: existingProfile, error: existingError } = await admin
+    .from("profiles")
+    .select("username")
+    .eq("id", userId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existingProfile?.username) return existingProfile.username;
+
+  const { data, error } = await admin.rpc("generate_username", { display_name: displayName });
+  if (error) throw error;
+  return data as string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -40,7 +54,7 @@ serve(async (req) => {
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   if (userError || !userData.user) return json({ error: "Invalid staff session." }, 401);
 
-  const { data: callerProfile, error: profileError } = await admin
+  const { data: callerProfile, error: profileError } = await callerClient
     .from("profiles")
     .select("id, staff_role")
     .eq("id", userData.user.id)
@@ -78,18 +92,26 @@ serve(async (req) => {
       return json({ error: "UserAdmin can only assign UserMod." }, 403);
     }
 
+    const requestedUsername = String(body.username || "").trim().toLowerCase();
     const created = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName, ign }
+      user_metadata: { full_name: fullName, ign, username: requestedUsername || undefined }
     });
     if (created.error) return json({ error: created.error.message }, 400);
 
     const userId = created.data.user.id;
+    let username: string;
+    try {
+      username = requestedUsername || await usernameFor(admin, userId, fullName || email);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Could not generate username." }, 400);
+    }
     const profile = await admin.from("profiles").upsert({
       id: userId,
       full_name: fullName,
+      username,
       ign,
       role,
       staff_role: staffRole,
@@ -102,10 +124,10 @@ serve(async (req) => {
       admin_id: callerProfile.id,
       action: "edge_create_user",
       target_id: userId,
-      details: { email, role, staff_role: staffRole }
+      details: { email, username, role, staff_role: staffRole }
     });
 
-    return json({ ok: true, user_id: userId });
+    return json({ ok: true, user_id: userId, username });
   }
 
   if (action === "deleteUser") {

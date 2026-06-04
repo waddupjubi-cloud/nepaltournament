@@ -43,7 +43,9 @@ bucket_id = 'team-logos' and auth.role() = 'authenticated'
 - Run `supabase/schema.sql`.
 - If this is an existing database, run `supabase/dashboard-crud-policies.sql`.
 - If this is an existing database, run `supabase/enable-realtime.sql`.
+- If this is an existing database, run `supabase/username-login.sql`.
 - If this is an existing database, run `supabase/broadcast-management.sql`.
+- If the Edge Function says `permission denied for table profiles`, run `supabase/fix-service-role-grants.sql`.
 - If team deletion fails, run `supabase/fix-team-delete.sql`.
 - Deploy the `admin-users` Edge Function for Superadmin Auth CRUD.
 - Create and seed the first superadmin.
@@ -62,11 +64,13 @@ npx supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz --u
 
 If the dashboard still says `Failed to send a request to the Edge Function`, open Supabase Dashboard > Edge Functions and confirm `admin-users` appears there. A missing function returns `404 Not Found`.
 
+If the dashboard says `permission denied for table profiles`, run `supabase/fix-service-role-grants.sql` in Supabase SQL Editor and try again.
+
 For GitHub Actions deployment, create a repository secret named `SUPABASE_ACCESS_TOKEN`.
 
-## Automatic Demo Data Import
+## Automatic Temp Data Import
 
-To import JSON demo data automatically after a push, create repository secrets:
+To import temporary JSON seed data automatically after a push, create repository secrets:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`

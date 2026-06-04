@@ -14,7 +14,7 @@ if (!supabaseUrl || !serviceRoleKey) {
   console.error("PowerShell example:");
   console.error("$env:SUPABASE_URL='https://your-project.supabase.co'");
   console.error("$env:SUPABASE_SERVICE_ROLE_KEY='your-service-role-or-secret-key'");
-  console.error("npm run import:demo");
+  console.error("npm run import:temp");
   process.exit(1);
 }
 
@@ -45,16 +45,19 @@ async function ensureAuthUsers(seedUsers) {
 
   for (const seed of seedUsers) {
     const email = seed.email.toLowerCase();
+    const requestedUsername = seed.username ? seed.username.toLowerCase() : null;
     let user = existing.get(email);
     if (!user) {
+      const username = requestedUsername || await generateUsername(seed.full_name);
       const created = await supabase.auth.admin.createUser({
         email,
         password: seed.password,
         email_confirm: true,
         user_metadata: {
+          username,
           full_name: seed.full_name,
           ign: seed.ign,
-          seed_account: true
+          temp_seed_account: true
         }
       });
       if (created.error) throw created.error;
@@ -64,9 +67,16 @@ async function ensureAuthUsers(seedUsers) {
       console.log(`Auth user exists: ${email}`);
     }
 
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (existingProfileError) throw existingProfileError;
     const profile = {
       id: user.id,
       full_name: seed.full_name,
+      username: existingProfile?.username || requestedUsername || await generateUsername(seed.full_name),
       ign: seed.ign,
       role: seed.role || "user",
       staff_role: seed.staff_role || null,
@@ -79,6 +89,12 @@ async function ensureAuthUsers(seedUsers) {
   }
 
   return byEmail;
+}
+
+async function generateUsername(displayName) {
+  const { data, error } = await supabase.rpc("generate_username", { display_name: displayName });
+  if (error) throw error;
+  return data;
 }
 
 async function upsertTeams(seedTeams, usersByEmail) {
@@ -171,15 +187,15 @@ async function insertFeedPosts(seedPosts, usersByEmail) {
 }
 
 async function main() {
-  const users = await readJson("data/demo-users.json");
-  const teams = await readJson("data/demo-teams.json");
-  const feedPosts = await readJson("data/demo-feed-posts.json");
+  const users = await readJson("data/temp-users.json");
+  const teams = await readJson("data/temp-teams.json");
+  const feedPosts = await readJson("data/temp-feed-posts.json");
 
   const usersByEmail = await ensureAuthUsers(users);
   await upsertTeams(teams, usersByEmail);
   await insertFeedPosts(feedPosts, usersByEmail);
 
-  console.log("Demo data import complete.");
+  console.log("Temporary JSON data import complete.");
 }
 
 main().catch((error) => {

@@ -1,4 +1,4 @@
-name: Import demo data
+name: Import temp data
 
 on:
   workflow_dispatch:
@@ -6,10 +6,10 @@ on:
     branches: [main]
     paths:
       - "data/**"
-      - "scripts/import-demo-data.mjs"
+      - "scripts/import-temp-data.mjs"
 
 jobs:
-  import-demo-data:
+  import-temp-data:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,10 +19,10 @@ jobs:
       - run: npm install
       - run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "Skipping demo import because Supabase secrets are not configured."
+            echo "Skipping temp import because Supabase secrets are not configured."
             exit 0
           fi
-          npm run import:demo
+          npm run import:temp
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

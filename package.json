@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "import:demo": "node scripts/import-demo-data.mjs"
+    "import:temp": "node scripts/import-temp-data.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1"

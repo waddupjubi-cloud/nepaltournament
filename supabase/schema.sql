@@ -30,6 +30,7 @@ exception when duplicate_object then null; end $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null,
+  username text,
   date_of_birth date,
   ign text,
   game_id text,
@@ -234,6 +235,7 @@ create table if not exists public.audit_logs (
 
 create index if not exists profiles_role_idx on public.profiles(role);
 create index if not exists profiles_staff_role_idx on public.profiles(staff_role);
+create unique index if not exists profiles_username_unique on public.profiles(username);
 create index if not exists teams_status_idx on public.teams(status);
 create index if not exists matches_tournament_idx on public.matches(tournament_id);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
@@ -241,16 +243,20 @@ create index if not exists messages_team_idx on public.messages(team_id, created
 create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id);
 create unique index if not exists feed_posts_pin_order_unique on public.feed_posts(pin_order) where is_pinned = true and pin_order is not null;
 
-grant usage on schema public to anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant select on all tables in schema public to anon;
+grant all privileges on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to authenticated;
-grant execute on all functions in schema public to authenticated;
+grant all privileges on all sequences in schema public to service_role;
+grant execute on all functions in schema public to authenticated, service_role;
 
 alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema public grant select on tables to anon;
+alter default privileges in schema public grant all privileges on tables to service_role;
 alter default privileges in schema public grant usage, select on sequences to authenticated;
-alter default privileges in schema public grant execute on functions to authenticated;
+alter default privileges in schema public grant all privileges on sequences to service_role;
+alter default privileges in schema public grant execute on functions to authenticated, service_role;
 
 alter table public.profiles replica identity full;
 alter table public.player_appeals replica identity full;
@@ -285,6 +291,57 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.username_base(display_name text)
+returns text
+language sql
+immutable
+as $$
+  select coalesce(nullif(regexp_replace(lower(split_part(trim(coalesce(display_name, 'user')), ' ', 1)), '[^a-z0-9]', '', 'g'), ''), 'user');
+$$;
+
+create or replace function public.generate_username(display_name text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  base text;
+  candidate text;
+  serial integer := 1;
+begin
+  base := public.username_base(display_name);
+  loop
+    candidate := base || serial::text;
+    if not exists (select 1 from public.profiles where username = candidate) then
+      return candidate;
+    end if;
+    serial := serial + 1;
+  end loop;
+end;
+$$;
+
+create or replace function public.resolve_login_email(login_identifier text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when position('@' in lower(trim(login_identifier))) > 0 then lower(trim(login_identifier))
+    else (
+      select lower(au.email)
+      from public.profiles p
+      join auth.users au on au.id = p.id
+      where p.username = lower(trim(login_identifier))
+      limit 1
+    )
+  end;
+$$;
+
+grant execute on function public.resolve_login_email(text) to anon, authenticated;
 
 drop trigger if exists profiles_updated_at on public.profiles;
 create trigger profiles_updated_at before update on public.profiles for each row execute function public.set_updated_at();
@@ -335,10 +392,11 @@ create trigger guard_feed_post_author_fields before insert or update on public.f
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, full_name, date_of_birth, ign, game_id, server_id, is_verified)
+  insert into public.profiles (id, full_name, username, date_of_birth, ign, game_id, server_id, is_verified)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', new.email),
+    coalesce(nullif(new.raw_user_meta_data->>'username', ''), public.generate_username(coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)))),
     nullif(new.raw_user_meta_data->>'date_of_birth', '')::date,
     nullif(new.raw_user_meta_data->>'ign', ''),
     nullif(new.raw_user_meta_data->>'game_id', ''),
@@ -349,6 +407,25 @@ begin
   return new;
 end;
 $$;
+
+do $$
+declare
+  profile_record record;
+begin
+  for profile_record in
+    select id, full_name, ign
+    from public.profiles
+    where username is null
+    order by created_at
+  loop
+    update public.profiles
+    set username = public.generate_username(coalesce(profile_record.full_name, profile_record.ign, profile_record.id::text))
+    where id = profile_record.id;
+  end loop;
+end;
+$$;
+
+alter table public.profiles alter column username set not null;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();

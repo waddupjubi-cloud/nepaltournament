@@ -21,6 +21,8 @@
   async function createTeam(event) {
     event.preventDefault();
     const U = window.TPUtils;
+    const teamName = U.qs("#teamName").value.trim();
+    if (!confirm(`Create team "${teamName}"?`)) return;
     const file = U.qs("#teamLogo").files[0];
     let logoUrl = null;
     if (file) {
@@ -31,7 +33,7 @@
     }
     const roster = [{ player_id: window.currentProfile.id, role: "founder", joined_at: new Date().toISOString() }];
     const { data, error } = await window.tpSupabase.from("teams").insert({
-      team_name: U.qs("#teamName").value.trim(),
+      team_name: teamName,
       team_tag: U.qs("#teamTag").value.trim().toUpperCase(),
       logo_url: logoUrl,
       founder_id: window.currentProfile.id,
@@ -40,6 +42,7 @@
       roster
     }).select("team_id").single();
     if (error) return alert(error.message);
+    alert(`Team created: ${teamName}`);
     location.href = `team.html?id=${data.team_id}`;
   }
 
@@ -69,9 +72,10 @@
         }).join("")}
       </div>`;
     U.qs("#submitTeamApproval")?.addEventListener("click", async () => {
+      if (!confirm("Submit this team for staff approval?")) return;
       const { error: requestError } = await window.tpSupabase.from("team_approval_requests").insert({ team_id: id, requested_by: window.currentProfile.id });
       if (requestError) alert(requestError.message);
-      else alert("Approval request sent to Player staff.");
+      else alert("Team approval request created.");
     });
     window.TPMessages.renderTeamChat(id);
   }

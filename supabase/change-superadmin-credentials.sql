@@ -1,21 +1,21 @@
 -- One-time helper for an existing Supabase project.
 -- This changes/promotes the Superadmin Auth user to:
--- Email: bzumarhajn2@gmail.com
+-- Email: bzumaharjan2@gmail.com
 -- Password: #Batman007
 --
 -- Safe path:
 -- 1. Run this in Supabase SQL Editor.
 -- 2. Log out of the app.
--- 3. Log in at staff.html with bzumarhajn2@gmail.com / #Batman007.
+-- 3. Log in at staff.html with bzumaharjan2@gmail.com / #Batman007.
 --
 -- Notes:
--- - If bzumarhajn2@gmail.com already exists in Auth, this script promotes that user.
+-- - If bzumaharjan2@gmail.com already exists in Auth, this script promotes that user.
 -- - If only super@tournament.com exists, this script changes that Auth user email/password.
--- - If both users exist, this script promotes bzumarhajn2@gmail.com and demotes super@tournament.com.
+-- - If both users exist, this script promotes bzumaharjan2@gmail.com and demotes super@tournament.com.
 
 do $$
 declare
-  new_email text := 'bzumarhajn2@gmail.com';
+  new_email text := 'bzumaharjan2@gmail.com';
   old_email text := 'super@tournament.com';
   new_password text := '#Batman007';
   new_user_id uuid;
@@ -34,7 +34,6 @@ begin
       email = new_email,
       encrypted_password = crypt(new_password, gen_salt('bf')),
       email_confirmed_at = coalesce(email_confirmed_at, now()),
-      confirmed_at = coalesce(confirmed_at, now()),
       updated_at = now(),
       raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('email_verified', true)
     where id = old_user_id
@@ -42,7 +41,6 @@ begin
 
     update auth.identities
     set
-      email = new_email,
       identity_data = coalesce(identity_data, '{}'::jsonb) || jsonb_build_object('email', new_email, 'email_verified', true),
       updated_at = now()
     where user_id = new_user_id and provider = 'email';
@@ -51,14 +49,12 @@ begin
     set
       encrypted_password = crypt(new_password, gen_salt('bf')),
       email_confirmed_at = coalesce(email_confirmed_at, now()),
-      confirmed_at = coalesce(confirmed_at, now()),
       updated_at = now(),
       raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('email_verified', true)
     where id = new_user_id;
 
     update auth.identities
     set
-      email = new_email,
       identity_data = coalesce(identity_data, '{}'::jsonb) || jsonb_build_object('email', new_email, 'email_verified', true),
       updated_at = now()
     where user_id = new_user_id and provider = 'email';
@@ -72,11 +68,12 @@ begin
     alter table public.profiles disable trigger guard_profile_privilege_changes;
   end if;
 
-  insert into public.profiles (id, full_name, role, staff_role, is_verified, is_player_approved)
-  values (new_user_id, 'Super Admin', 'superadmin', 'superadmin', true, true)
+  insert into public.profiles (id, full_name, username, role, staff_role, is_verified, is_player_approved)
+  values (new_user_id, 'Super Admin', public.generate_username('Super Admin'), 'superadmin', 'superadmin', true, true)
   on conflict (id) do update
   set
     full_name = 'Super Admin',
+    username = coalesce(public.profiles.username, excluded.username),
     role = 'superadmin',
     staff_role = 'superadmin',
     is_verified = true,

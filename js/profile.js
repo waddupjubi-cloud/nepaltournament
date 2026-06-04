@@ -5,6 +5,7 @@
     const form = U.qs("#profileForm");
     if (!form || !p) return;
     form.innerHTML = `
+      <label class="field"><input id="profileUsername" value="${U.escapeHtml(p.username || "")}" readonly placeholder=" "><span>Username</span></label>
       <label class="field"><input id="fullName" value="${U.escapeHtml(p.full_name || "")}" required placeholder=" "><span>Full name</span></label>
       <label class="field"><input id="profileIgn" value="${U.escapeHtml(p.ign || "")}" placeholder=" "><span>IGN</span></label>
       <label class="field"><input id="profileGameId" value="${U.escapeHtml(p.game_id || "")}" placeholder=" "><span>Game ID</span></label>
@@ -45,6 +46,7 @@
     const U = window.TPUtils;
     const roles = U.qsa("#preferredRoles input:checked").map((input) => input.value);
     if (!roles.length) return alert("Choose at least one role.");
+    if (!confirm("Submit this player appeal for staff review?")) return;
     const { error } = await window.tpSupabase.from("player_appeals").insert({
       user_id: window.currentProfile.id,
       preferred_roles: roles,
@@ -53,7 +55,7 @@
     if (error) alert(error.message);
     else {
       U.qs("#appealForm").reset();
-      alert("Appeal submitted.");
+      alert("Player appeal created.");
     }
   }
 

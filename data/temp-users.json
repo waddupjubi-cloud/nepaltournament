@@ -1,0 +1,568 @@
+[
+  {
+    "email": "nira.useradmin@tournament.test",
+    "password": "NiraUserAdmin#2026",
+    "full_name": "Nira Shrestha",
+    "ign": "NiraNova",
+    "role": "user",
+    "staff_role": "useradmin",
+    "username": "nira1"
+  },
+  {
+    "email": "arjun.playeradmin@tournament.test",
+    "password": "ArjunPlayerAdmin#2026",
+    "full_name": "Arjun Gurung",
+    "ign": "GurkhaPulse",
+    "role": "player",
+    "staff_role": "playeradmin",
+    "username": "arjun1"
+  },
+  {
+    "email": "sahana.tournamentadmin@tournament.test",
+    "password": "SahanaTournamentAdmin#2026",
+    "full_name": "Sahana Karki",
+    "ign": "BracketQueen",
+    "role": "player",
+    "staff_role": "tournamentadmin",
+    "username": "sahana1"
+  },
+  {
+    "email": "roshan.usermod@tournament.test",
+    "password": "RoshanUserMod#2026",
+    "full_name": "Roshan Lama",
+    "ign": "CalmSignal",
+    "role": "user",
+    "staff_role": "usermod",
+    "username": "roshan1"
+  },
+  {
+    "email": "meera.playermod@tournament.test",
+    "password": "MeeraPlayerMod#2026",
+    "full_name": "Meera Rai",
+    "ign": "RosterMage",
+    "role": "player",
+    "staff_role": "playermod",
+    "username": "meera1"
+  },
+  {
+    "email": "kabir.tournamentmod@tournament.test",
+    "password": "KabirTournamentMod#2026",
+    "full_name": "Kabir Thapa",
+    "ign": "ScoreForge",
+    "role": "player",
+    "staff_role": "tournamentmod",
+    "username": "kabir1"
+  },
+  {
+    "email": "aayan.storm@tournament.test",
+    "password": "StormAayan#2026",
+    "full_name": "Aayan Basnet",
+    "ign": "AayanStorm",
+    "role": "player",
+    "username": "aayan1"
+  },
+  {
+    "email": "prisha.storm@tournament.test",
+    "password": "StormPrisha#2026",
+    "full_name": "Prisha Adhikari",
+    "ign": "PrismJG",
+    "role": "player",
+    "username": "prisha1"
+  },
+  {
+    "email": "bibek.storm@tournament.test",
+    "password": "StormBibek#2026",
+    "full_name": "Bibek Tamang",
+    "ign": "BexGold",
+    "role": "player",
+    "username": "bibek1"
+  },
+  {
+    "email": "simran.storm@tournament.test",
+    "password": "StormSimran#2026",
+    "full_name": "Simran Malla",
+    "ign": "MidMirage",
+    "role": "player",
+    "username": "simran1"
+  },
+  {
+    "email": "nabin.storm@tournament.test",
+    "password": "StormNabin#2026",
+    "full_name": "Nabin Khadka",
+    "ign": "RiverRoam",
+    "role": "player",
+    "username": "nabin1"
+  },
+  {
+    "email": "laxmi.storm@tournament.test",
+    "password": "StormLaxmi#2026",
+    "full_name": "Laxmi Bista",
+    "ign": "CoachLuma",
+    "role": "player",
+    "username": "laxmi1"
+  },
+  {
+    "email": "sujal.storm@tournament.test",
+    "password": "StormSujal#2026",
+    "full_name": "Sujal KC",
+    "ign": "BenchBolt",
+    "role": "player",
+    "username": "sujal1"
+  },
+  {
+    "email": "manisha.storm@tournament.test",
+    "password": "StormManisha#2026",
+    "full_name": "Manisha Rana",
+    "ign": "SubNova",
+    "role": "player",
+    "username": "manisha1"
+  },
+  {
+    "email": "rakesh.yaks@tournament.test",
+    "password": "YaksRakesh#2026",
+    "full_name": "Rakesh Maharjan",
+    "ign": "YakEXP",
+    "role": "player",
+    "username": "rakesh1"
+  },
+  {
+    "email": "anjali.yaks@tournament.test",
+    "password": "YaksAnjali#2026",
+    "full_name": "Anjali Kunwar",
+    "ign": "JungleJatra",
+    "role": "player",
+    "username": "anjali1"
+  },
+  {
+    "email": "sabin.yaks@tournament.test",
+    "password": "YaksSabin#2026",
+    "full_name": "Sabin Magar",
+    "ign": "GoldYak",
+    "role": "player",
+    "username": "sabin1"
+  },
+  {
+    "email": "kriti.yaks@tournament.test",
+    "password": "YaksKriti#2026",
+    "full_name": "Kriti Poudel",
+    "ign": "KritiCore",
+    "role": "player",
+    "username": "kriti1"
+  },
+  {
+    "email": "ujwal.yaks@tournament.test",
+    "password": "YaksUjwal#2026",
+    "full_name": "Ujwal Shahi",
+    "ign": "RoamRider",
+    "role": "player",
+    "username": "ujwal1"
+  },
+  {
+    "email": "devika.yaks@tournament.test",
+    "password": "YaksDevika#2026",
+    "full_name": "Devika Bohara",
+    "ign": "YakCoach",
+    "role": "player",
+    "username": "devika1"
+  },
+  {
+    "email": "sagar.yaks@tournament.test",
+    "password": "YaksSagar#2026",
+    "full_name": "Sagar Ale",
+    "ign": "SageSub",
+    "role": "player",
+    "username": "sagar1"
+  },
+  {
+    "email": "asmita.yaks@tournament.test",
+    "password": "YaksAsmita#2026",
+    "full_name": "Asmita Giri",
+    "ign": "AstraBench",
+    "role": "player",
+    "username": "asmita1"
+  },
+  {
+    "email": "niraj.kings@tournament.test",
+    "password": "KingsNiraj#2026",
+    "full_name": "Niraj Bhandari",
+    "ign": "KingExp",
+    "role": "player",
+    "username": "niraj1"
+  },
+  {
+    "email": "sneha.kings@tournament.test",
+    "password": "KingsSneha#2026",
+    "full_name": "Sneha Joshi",
+    "ign": "SnehaJungle",
+    "role": "player",
+    "username": "sneha1"
+  },
+  {
+    "email": "dinesh.kings@tournament.test",
+    "password": "KingsDinesh#2026",
+    "full_name": "Dinesh Oli",
+    "ign": "GoldCrown",
+    "role": "player",
+    "username": "dinesh1"
+  },
+  {
+    "email": "puja.kings@tournament.test",
+    "password": "KingsPuja#2026",
+    "full_name": "Puja Gautam",
+    "ign": "PujaMid",
+    "role": "player",
+    "username": "puja1"
+  },
+  {
+    "email": "bishal.kings@tournament.test",
+    "password": "KingsBishal#2026",
+    "full_name": "Bishal Tamrakar",
+    "ign": "RoyalRoam",
+    "role": "player",
+    "username": "bishal1"
+  },
+  {
+    "email": "nisha.kings@tournament.test",
+    "password": "KingsNisha#2026",
+    "full_name": "Nisha Dongol",
+    "ign": "CoachCrown",
+    "role": "player",
+    "username": "nisha1"
+  },
+  {
+    "email": "prabin.kings@tournament.test",
+    "password": "KingsPrabin#2026",
+    "full_name": "Prabin Lama",
+    "ign": "KingsBench",
+    "role": "player",
+    "username": "prabin1"
+  },
+  {
+    "email": "srijana.kings@tournament.test",
+    "password": "KingsSrijana#2026",
+    "full_name": "Srijana Rai",
+    "ign": "SrijSub",
+    "role": "player",
+    "username": "srijana1"
+  },
+  {
+    "email": "dipesh.drakes@tournament.test",
+    "password": "DrakesDipesh#2026",
+    "full_name": "Dipesh Khatri",
+    "ign": "DrakeEXP",
+    "role": "player",
+    "username": "dipesh1"
+  },
+  {
+    "email": "karuna.drakes@tournament.test",
+    "password": "DrakesKaruna#2026",
+    "full_name": "Karuna Budha",
+    "ign": "KaruJG",
+    "role": "player",
+    "username": "karuna1"
+  },
+  {
+    "email": "rohit.drakes@tournament.test",
+    "password": "DrakesRohit#2026",
+    "full_name": "Rohit Kandel",
+    "ign": "GoldDrake",
+    "role": "player",
+    "username": "rohit1"
+  },
+  {
+    "email": "aarati.drakes@tournament.test",
+    "password": "DrakesAarati#2026",
+    "full_name": "Aarati Shrestha",
+    "ign": "MidAaru",
+    "role": "player",
+    "username": "aarati1"
+  },
+  {
+    "email": "suman.drakes@tournament.test",
+    "password": "DrakesSuman#2026",
+    "full_name": "Suman Pariyar",
+    "ign": "RoamFlare",
+    "role": "player",
+    "username": "suman1"
+  },
+  {
+    "email": "binita.drakes@tournament.test",
+    "password": "DrakesBinita#2026",
+    "full_name": "Binita Gurung",
+    "ign": "CoachEmber",
+    "role": "player",
+    "username": "binita1"
+  },
+  {
+    "email": "kamal.drakes@tournament.test",
+    "password": "DrakesKamal#2026",
+    "full_name": "Kamal Basyal",
+    "ign": "DrakeSub",
+    "role": "player",
+    "username": "kamal1"
+  },
+  {
+    "email": "elina.drakes@tournament.test",
+    "password": "DrakesElina#2026",
+    "full_name": "Elina Tamang",
+    "ign": "ElinaReserve",
+    "role": "player",
+    "username": "elina1"
+  },
+  {
+    "email": "sushant.phoenix@tournament.test",
+    "password": "PhoenixSushant#2026",
+    "full_name": "Sushant Pandey",
+    "ign": "PhoenixEXP",
+    "role": "player",
+    "username": "sushant1"
+  },
+  {
+    "email": "monika.phoenix@tournament.test",
+    "password": "PhoenixMonika#2026",
+    "full_name": "Monika Rana",
+    "ign": "MonJungle",
+    "role": "player",
+    "username": "monika1"
+  },
+  {
+    "email": "rajiv.phoenix@tournament.test",
+    "password": "PhoenixRajiv#2026",
+    "full_name": "Rajiv Chaudhary",
+    "ign": "RajGold",
+    "role": "player",
+    "username": "rajiv1"
+  },
+  {
+    "email": "isha.phoenix@tournament.test",
+    "password": "PhoenixIsha#2026",
+    "full_name": "Isha Bhandari",
+    "ign": "IshaMid",
+    "role": "player",
+    "username": "isha1"
+  },
+  {
+    "email": "mahesh.phoenix@tournament.test",
+    "password": "PhoenixMahesh#2026",
+    "full_name": "Mahesh Karki",
+    "ign": "RoamRise",
+    "role": "player",
+    "username": "mahesh1"
+  },
+  {
+    "email": "sarita.phoenix@tournament.test",
+    "password": "PhoenixSarita#2026",
+    "full_name": "Sarita Maharjan",
+    "ign": "CoachRise",
+    "role": "player",
+    "username": "sarita1"
+  },
+  {
+    "email": "anup.phoenix@tournament.test",
+    "password": "PhoenixAnup#2026",
+    "full_name": "Anup Rai",
+    "ign": "AnupSub",
+    "role": "player",
+    "username": "anup1"
+  },
+  {
+    "email": "renu.phoenix@tournament.test",
+    "password": "PhoenixRenu#2026",
+    "full_name": "Renu Lama",
+    "ign": "RenuBench",
+    "role": "player",
+    "username": "renu1"
+  },
+  {
+    "email": "nischal.titans@tournament.test",
+    "password": "TitansNischal#2026",
+    "full_name": "Nischal Aryal",
+    "ign": "TitanEXP",
+    "role": "player",
+    "username": "nischal1"
+  },
+  {
+    "email": "aakriti.titans@tournament.test",
+    "password": "TitansAakriti#2026",
+    "full_name": "Aakriti Thapa",
+    "ign": "AakriJG",
+    "role": "player",
+    "username": "aakriti1"
+  },
+  {
+    "email": "sandesh.titans@tournament.test",
+    "password": "TitansSandesh#2026",
+    "full_name": "Sandesh Khatiwada",
+    "ign": "TitanGold",
+    "role": "player",
+    "username": "sandesh1"
+  },
+  {
+    "email": "jasmine.titans@tournament.test",
+    "password": "TitansJasmine#2026",
+    "full_name": "Jasmine Rai",
+    "ign": "JazMid",
+    "role": "player",
+    "username": "jasmine1"
+  },
+  {
+    "email": "lokesh.titans@tournament.test",
+    "password": "TitansLokesh#2026",
+    "full_name": "Lokesh Gurung",
+    "ign": "RoamTitan",
+    "role": "player",
+    "username": "lokesh1"
+  },
+  {
+    "email": "sita.titans@tournament.test",
+    "password": "TitansSita#2026",
+    "full_name": "Sita Koirala",
+    "ign": "TitanCoach",
+    "role": "player",
+    "username": "sita1"
+  },
+  {
+    "email": "rabindra.titans@tournament.test",
+    "password": "TitansRabindra#2026",
+    "full_name": "Rabindra Sunar",
+    "ign": "RabinSub",
+    "role": "player",
+    "username": "rabindra1"
+  },
+  {
+    "email": "namrata.titans@tournament.test",
+    "password": "TitansNamrata#2026",
+    "full_name": "Namrata Malla",
+    "ign": "NamReserve",
+    "role": "player",
+    "username": "namrata1"
+  },
+  {
+    "email": "ashish.lotus@tournament.test",
+    "password": "LotusAshish#2026",
+    "full_name": "Ashish Regmi",
+    "ign": "LotusEXP",
+    "role": "player",
+    "username": "ashish1"
+  },
+  {
+    "email": "somiya.lotus@tournament.test",
+    "password": "LotusSomiya#2026",
+    "full_name": "Somiya Shakya",
+    "ign": "LotusJG",
+    "role": "player",
+    "username": "somiya1"
+  },
+  {
+    "email": "bikram.lotus@tournament.test",
+    "password": "LotusBikram#2026",
+    "full_name": "Bikram Dangol",
+    "ign": "BikGold",
+    "role": "player",
+    "username": "bikram1"
+  },
+  {
+    "email": "rita.lotus@tournament.test",
+    "password": "LotusRita#2026",
+    "full_name": "Rita Karki",
+    "ign": "RitaMid",
+    "role": "player",
+    "username": "rita1"
+  },
+  {
+    "email": "hemant.lotus@tournament.test",
+    "password": "LotusHemant#2026",
+    "full_name": "Hemant Bohara",
+    "ign": "RoamLotus",
+    "role": "player",
+    "username": "hemant1"
+  },
+  {
+    "email": "pramila.lotus@tournament.test",
+    "password": "LotusPramila#2026",
+    "full_name": "Pramila Tamang",
+    "ign": "CoachLotus",
+    "role": "player",
+    "username": "pramila1"
+  },
+  {
+    "email": "milan.lotus@tournament.test",
+    "password": "LotusMilan#2026",
+    "full_name": "Milan Ale",
+    "ign": "MilanBench",
+    "role": "player",
+    "username": "milan1"
+  },
+  {
+    "email": "kabita.lotus@tournament.test",
+    "password": "LotusKabita#2026",
+    "full_name": "Kabita Poudel",
+    "ign": "KabiSub",
+    "role": "player",
+    "username": "kabita1"
+  },
+  {
+    "email": "samir.blaze@tournament.test",
+    "password": "BlazeSamir#2026",
+    "full_name": "Samir KC",
+    "ign": "BlazeEXP",
+    "role": "player",
+    "username": "samir1"
+  },
+  {
+    "email": "parbati.blaze@tournament.test",
+    "password": "BlazeParbati#2026",
+    "full_name": "Parbati Magar",
+    "ign": "BlazeJG",
+    "role": "player",
+    "username": "parbati1"
+  },
+  {
+    "email": "saurav.blaze@tournament.test",
+    "password": "BlazeSaurav#2026",
+    "full_name": "Saurav Shahi",
+    "ign": "BlazeGold",
+    "role": "player",
+    "username": "saurav1"
+  },
+  {
+    "email": "reema.blaze@tournament.test",
+    "password": "BlazeReema#2026",
+    "full_name": "Reema Maharjan",
+    "ign": "ReemaMid",
+    "role": "player",
+    "username": "reema1"
+  },
+  {
+    "email": "yogesh.blaze@tournament.test",
+    "password": "BlazeYogesh#2026",
+    "full_name": "Yogesh Tamang",
+    "ign": "BlazeRoam",
+    "role": "player",
+    "username": "yogesh1"
+  },
+  {
+    "email": "deepa.blaze@tournament.test",
+    "password": "BlazeDeepa#2026",
+    "full_name": "Deepa Gurung",
+    "ign": "CoachBlaze",
+    "role": "player",
+    "username": "deepa1"
+  },
+  {
+    "email": "rupesh.blaze@tournament.test",
+    "password": "BlazeRupesh#2026",
+    "full_name": "Rupesh Lama",
+    "ign": "RupeSub",
+    "role": "player",
+    "username": "rupesh1"
+  },
+  {
+    "email": "bhawana.blaze@tournament.test",
+    "password": "BlazeBhawana#2026",
+    "full_name": "Bhawana Joshi",
+    "ign": "BlazeBench",
+    "role": "player",
+    "username": "bhawana1"
+  }
+]

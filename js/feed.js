@@ -55,7 +55,7 @@
     if (!root || !p) return;
     root.innerHTML = `
       <h2>${U.escapeHtml(p.full_name)}</h2>
-      <p class="muted">${U.escapeHtml(p.ign || "No IGN set")}</p>
+      <p class="muted">@${U.escapeHtml(p.username || "username")} - ${U.escapeHtml(p.ign || "No IGN set")}</p>
       <div class="pill-row">
         <span class="pill good">${U.escapeHtml(p.role)}</span>
         ${p.staff_role ? `<span class="pill">${U.escapeHtml(p.staff_role)}</span>` : ""}

@@ -18,7 +18,7 @@ Tournament Players is a static HTML, CSS, and vanilla JavaScript esports platfor
 4. In Authentication settings, enable email confirmations.
 5. In Storage, create a public bucket named `team-logos`.
 6. Create the first Auth user manually:
-   - Email: `bzumarhajn2@gmail.com`
+   - Email: `bzumaharjan2@gmail.com`
    - Password: `#Batman007`
    - Mark email as confirmed.
 7. Run [supabase/seed.sql](supabase/seed.sql).
@@ -55,20 +55,21 @@ Then open `http://localhost:8080`.
 
 - Normal users use [index.html](index.html).
 - Staff users use [staff.html](staff.html).
+- Login accepts either email or the generated lowercase username, such as `biju1`.
 - The same account can have a user role and a staff role.
 - Staff can open the dashboard from [dashboard.html](dashboard.html), then switch to user view.
 
 ## 5. Important Limitations
 
-This project intentionally has no custom backend. That keeps hosting simple, but it means password resets, changing Auth email, and setting Auth custom claims must be done through Supabase’s dashboard or Edge Functions if you add them later. The app uses `profiles.staff_role` and RLS helper functions for authorization.
+This project intentionally has no custom backend. That keeps hosting simple, but it means password resets, changing Auth email, and setting Auth custom claims must be done through Supabase's dashboard or Edge Functions if you add them later. The app uses `profiles.staff_role` and RLS helper functions for authorization.
 
-## 6. Import Demo Teams And Staff
+## 6. Import Temp Teams And Staff
 
-Demo data lives in:
+Temporary seed JSON lives in:
 
-- [data/demo-users.json](data/demo-users.json)
-- [data/demo-teams.json](data/demo-teams.json)
-- [data/demo-feed-posts.json](data/demo-feed-posts.json)
+- [data/temp-users.json](data/temp-users.json)
+- [data/temp-teams.json](data/temp-teams.json)
+- [data/temp-feed-posts.json](data/temp-feed-posts.json)
 
 This creates:
 
@@ -85,7 +86,7 @@ PowerShell:
 npm install
 $env:SUPABASE_URL='https://your-project.supabase.co'
 $env:SUPABASE_SERVICE_ROLE_KEY='your-secret-or-service-role-key'
-npm run import:demo
+npm run import:temp
 ```
 
 For automatic import after pushing to GitHub, add these repository secrets:
@@ -93,7 +94,7 @@ For automatic import after pushing to GitHub, add these repository secrets:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Then the workflow in [.github/workflows/import-demo-data.yml](.github/workflows/import-demo-data.yml) can import demo data when files in `data/` change.
+Then the workflow in [.github/workflows/import-temp-data.yml](.github/workflows/import-temp-data.yml) can import temporary JSON seed data when files in `data/` change.
 
 ## 7. Enable Full Dashboard CRUD
 
@@ -104,6 +105,10 @@ If you already ran the original schema, run this one-time SQL patch in Supabase 
 Also run the realtime patch:
 
 [supabase/enable-realtime.sql](supabase/enable-realtime.sql)
+
+For username login on an existing database, run:
+
+[supabase/username-login.sql](supabase/username-login.sql)
 
 If team deletion fails in Player Management, run:
 
@@ -150,6 +155,8 @@ https://zxrqfnrfshnvrnvuujmz.supabase.co/functions/v1/admin-users
 
 On this Windows project, use `npx supabase` instead of plain `supabase` unless you installed the CLI globally.
 
+If the deployed function says `permission denied for table profiles`, run [supabase/fix-service-role-grants.sql](supabase/fix-service-role-grants.sql) in the Supabase SQL editor.
+
 For GitHub auto-deploy, add this repository secret:
 
 - `SUPABASE_ACCESS_TOKEN`
@@ -165,7 +172,8 @@ Then [.github/workflows/deploy-supabase-functions.yml](.github/workflows/deploy-
 - `dashboard.html`: role-based staff dashboard.
 - `css/styles.css`, `css/bracket.css`: themes, responsive layout, bracket UI.
 - `js/*.js`: Supabase client, auth, pages, notifications, messages, bracket generation.
-- `data/*.json`: demo users, teams, and feed posts.
-- `scripts/import-demo-data.mjs`: imports demo JSON into Supabase.
+- `data/*.json`: temporary seed users, teams, and feed posts.
+- `scripts/import-temp-data.mjs`: imports temporary JSON into Supabase.
 - `supabase/functions/admin-users`: Superadmin-only Auth user creation/deletion/password reset.
 - `supabase/schema.sql`, `supabase/seed.sql`: database setup.
+

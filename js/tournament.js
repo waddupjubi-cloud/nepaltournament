@@ -67,13 +67,14 @@
     const { data: teams } = await window.tpSupabase.from("teams").select("team_id, team_name").eq("team_leader_id", window.currentProfile.id).eq("status", "approved");
     if (!teams?.length) return alert("You need to lead an approved team before registering.");
     const team = teams[0];
+    if (!confirm(`Create tournament registration for ${team.team_name}?`)) return;
     const { error } = await window.tpSupabase.from("tournament_registrations").insert({
       tournament_id: tournamentId,
       team_id: team.team_id,
       requested_by: window.currentProfile.id
     });
     if (error) alert(error.message);
-    else alert(`${team.team_name} registration sent for approval.`);
+    else alert(`Tournament registration created for ${team.team_name}.`);
   }
 
   function startTournamentListRealtime() {

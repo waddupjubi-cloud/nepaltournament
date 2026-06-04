@@ -147,6 +147,14 @@
     return "just now";
   }
 
+  function confirmCreate(kind, name) {
+    return confirm(`Create ${kind}${name ? ` "${name}"` : ""}?`);
+  }
+
+  function createdPopup(kind, name, extra) {
+    alert(`${kind} created${name ? `: ${name}` : ""}${extra ? `\n${extra}` : ""}`);
+  }
+
   async function logAction(action, targetId, details) {
     await db().from("audit_logs").insert({
       admin_id: me().id,
@@ -160,13 +168,23 @@
     const { data: sessionData } = await db().auth.getSession();
     const token = sessionData.session?.access_token;
     if (!token) throw new Error("Staff session expired. Please log in again.");
-    const { data, error } = await db().functions.invoke("admin-users", {
-      body: { action, ...payload },
-      headers: { Authorization: `Bearer ${token}` }
+    const cfg = window.TP_CONFIG || {};
+    const response = await fetch(`${cfg.SUPABASE_URL}/functions/v1/admin-users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ action, ...payload })
     });
-    if (error) {
-      throw new Error(`${error.message}. The admin-users Edge Function is not reachable yet. Deploy it with: supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz`);
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
     }
+    if (!response.ok) throw new Error(data?.error || data?.message || `Edge Function returned ${response.status}. Deploy or redeploy admin-users in Supabase.`);
     if (data?.error) throw new Error(data.error);
     return data;
   }
@@ -275,7 +293,7 @@
 
   function renderUserRow(p) {
     return `<tr>
-      <td>${U().escapeHtml(p.full_name)}<br><span class="muted">${U().escapeHtml(p.ign || p.id)}</span></td>
+      <td>${U().escapeHtml(p.full_name)}<br><span class="muted">@${U().escapeHtml(p.username || "username")}${p.ign ? ` - ${U().escapeHtml(p.ign)}` : ""}</span></td>
       <td>${U().escapeHtml(p.role)}</td>
       <td>${U().escapeHtml(p.staff_role || "-")}</td>
       <td>${p.is_verified ? "Yes" : "No"}</td>
@@ -313,19 +331,24 @@
     U().qs("#createUserForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
-        U().setMessage("#createUserMessage", "Creating user...");
         const staffRole = U().qs("#newUserStaffRole").value || null;
         if (staffRole && !canAssignStaffRole(staffRole)) throw new Error("You cannot assign that staff role.");
+        const fullName = U().qs("#newUserName").value.trim();
+        const email = U().qs("#newUserEmail").value.trim();
+        const role = U().qs("#newUserRole").value;
+        if (!confirmCreate(role === "player" ? "player user" : "user", fullName)) return;
+        U().setMessage("#createUserMessage", "Creating user...");
         const result = await callAdminUsersFunction("createUser", {
-          email: U().qs("#newUserEmail").value.trim(),
+          email,
           password: U().qs("#newUserPassword").value,
-          full_name: U().qs("#newUserName").value.trim(),
+          full_name: fullName,
           ign: U().qs("#newUserIgn").value.trim(),
-          role: U().qs("#newUserRole").value,
+          role,
           staff_role: staffRole
         });
-        await logAction("create_user", result.user_id, { email: U().qs("#newUserEmail").value.trim(), staff_role: staffRole });
-        U().setMessage("#createUserMessage", "User created.", "success");
+        await logAction("create_user", result.user_id, { email, username: result.username, staff_role: staffRole });
+        U().setMessage("#createUserMessage", `User created. Username: ${result.username}`, "success");
+        createdPopup(role === "player" ? "Player user" : "User", fullName, `Username: ${result.username}`);
         U().qs("#createUserForm").reset();
         users();
       } catch (error) {
@@ -383,6 +406,7 @@
     if (!profile) return;
     U().openModal("Edit User", `
       <form id="editUserForm" class="form-grid">
+        <label class="field"><input id="editUsername" value="${U().escapeHtml(profile.username || "")}" readonly placeholder=" "><span>Username</span></label>
         <label class="field"><input id="editFullName" value="${U().escapeHtml(profile.full_name || "")}" required placeholder=" "><span>Full name</span></label>
         <label class="field"><input id="editIgn" value="${U().escapeHtml(profile.ign || "")}" placeholder=" "><span>IGN</span></label>
         <label class="field"><input id="editGameId" value="${U().escapeHtml(profile.game_id || "")}" placeholder=" "><span>Game ID</span></label>
@@ -420,12 +444,12 @@
   async function loadAppeals() {
     const root = U().qs("#appealsList");
     if (!root) return;
-    const { data, error } = await db().from("player_appeals").select("*, profiles(full_name, ign)").order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await db().from("player_appeals").select("*, applicant:profiles!player_appeals_user_id_fkey(full_name, ign, username)").order("created_at", { ascending: false }).limit(50);
     if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
     root.innerHTML = (data || []).map((a) => `
       <div class="item-card">
         <div class="section-heading">
-          <div><strong>${U().escapeHtml(a.profiles?.full_name || a.user_id)}</strong><p class="muted">${U().escapeHtml(a.status)}</p></div>
+          <div><strong>${U().escapeHtml(a.applicant?.full_name || a.user_id)}</strong><p class="muted">@${U().escapeHtml(a.applicant?.username || "username")} - ${U().escapeHtml(a.status)}</p></div>
           ${U().rolePills(a.preferred_roles)}
         </div>
         <p>${U().escapeHtml(a.note || "")}</p>
@@ -587,6 +611,7 @@
         team_leader_id: team?.team_leader_id || founder,
         coach_id: coach
       };
+      if (isNew && !confirmCreate("team", payload.team_name)) return;
       const result = isNew
         ? await db().from("teams").insert(payload).select("team_id").single()
         : await db().from("teams").update(payload).eq("team_id", team.team_id).select("team_id").single();
@@ -594,7 +619,8 @@
       await db().from("team_members").delete().eq("team_id", result.data.team_id);
       await db().from("team_members").insert(workingRoster.map((member) => ({ team_id: result.data.team_id, player_id: member.player_id, role: member.role })));
       await logAction(isNew ? "create_team" : "update_team", result.data.team_id, { team_name: payload.team_name });
-      U().setMessage("#teamEditorMessage", "Team saved.", "success");
+      U().setMessage("#teamEditorMessage", isNew ? "Team created." : "Team saved.", "success");
+      if (isNew) createdPopup("Team", payload.team_name);
       players();
     });
     renderRows();
@@ -603,7 +629,7 @@
   async function broadcasts() {
     const [postResult, profileResult, tournamentResult] = await Promise.all([
       db().from("feed_posts").select("*").order("is_pinned", { ascending: false }).order("pin_order", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false }).limit(150),
-      db().from("profiles").select("id, full_name, ign, role, staff_role").order("full_name").limit(500),
+      db().from("profiles").select("id, full_name, username, ign, role, staff_role").order("full_name").limit(500),
       db().from("tournaments").select("tournament_id, name").order("created_at", { ascending: false }).limit(200)
     ]);
     if (postResult.error) return U().qs("#dashContent").innerHTML = `<p class="message error">${U().escapeHtml(postResult.error.message)}</p>`;
@@ -678,7 +704,7 @@
       });
     };
     labelOptions("#broadcastTournament", tournamentsList, "tournament_id", (item) => item.name);
-    labelOptions("#broadcastTargetUser", profiles, "id", (item) => `${item.full_name} (${item.ign || item.role || "user"})`);
+    labelOptions("#broadcastTargetUser", profiles, "id", (item) => `${item.full_name} (@${item.username || "username"})`);
   }
 
   async function freePinSlot(pinOrder, postId) {
@@ -721,18 +747,20 @@
     U().qs("#broadcastForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
-        U().setMessage("#broadcastMessage", "Posting broadcast...");
         const payload = {
           ...readBroadcastForm("broadcast"),
           author_id: me().id,
           author_role: me().staff_role
         };
         validateBroadcastPayload(payload);
+        if (!confirmCreate("broadcast", payload.title)) return;
+        U().setMessage("#broadcastMessage", "Posting broadcast...");
         if (payload.is_pinned) await freePinSlot(payload.pin_order);
         const { data, error } = await db().from("feed_posts").insert(payload).select("post_id").single();
         if (error) throw error;
         await logAction("create_broadcast", data.post_id, payload);
         U().setMessage("#broadcastMessage", "Broadcast posted.", "success");
+        createdPopup("Broadcast", payload.title);
         U().qs("#broadcastForm").reset();
         broadcasts();
       } catch (error) {
@@ -774,7 +802,7 @@
     if (userSelect) {
       Array.from(userSelect.options).forEach((option) => {
         const profile = profiles.find((entry) => entry.id === option.value);
-        if (profile) option.textContent = `${profile.full_name} (${profile.ign || profile.role || "user"})`;
+        if (profile) option.textContent = `${profile.full_name} (@${profile.username || "username"})`;
       });
     }
     const tournamentSelect = U().qs("#editBroadcastTournament");
@@ -909,10 +937,12 @@
         status: U().qs("#tourStatus").value,
         created_by: me().id
       };
+      if (!confirmCreate("tournament", payload.name)) return;
       const { data, error } = await db().from("tournaments").insert(payload).select("tournament_id").single();
       if (error) alert(error.message);
       else {
         await logAction("create_tournament", data.tournament_id, payload);
+        createdPopup("Tournament", payload.name);
         tournaments();
       }
     });
@@ -926,10 +956,12 @@
         scheduled_start_utc: U().qs("#matchSchedule").value ? new Date(U().qs("#matchSchedule").value).toISOString() : null,
         status: "scheduled"
       };
+      if (!confirmCreate("match", payload.round_name)) return;
       const { data, error } = await db().from("matches").insert(payload).select("match_id").single();
       if (error) alert(error.message);
       else {
         await logAction("create_match", data.match_id, payload);
+        createdPopup("Match", payload.round_name);
         tournaments();
       }
     });
