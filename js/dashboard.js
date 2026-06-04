@@ -385,7 +385,7 @@
           datasets: [{
             label: "Dashboard totals",
             data: statCards.map(([, , value]) => value),
-            backgroundColor: ["#0066cc", "#00a65a", "#8b5cf6", "#f59e0b", "#8b0000", "#ffcc00", "#00cc44", "#2563eb"]
+            backgroundColor: ["#0066cc", "#ff335f", "#8b5cf6", "#f59e0b", "#8b0000", "#ffcc00", "#b90f32", "#2563eb"]
           }]
         },
         options: {

@@ -139,9 +139,12 @@
       columns = Array(Math.ceil(canvas.width / 18)).fill(1);
     }
     function frame() {
-      ctx.fillStyle = "rgba(10,10,10,0.08)";
+      const styles = getComputedStyle(document.body);
+      const accent = styles.getPropertyValue("--accent").trim() || "#0066cc";
+      const isDark = document.body.classList.contains("dark") || document.body.classList.contains("staff-surface");
+      ctx.fillStyle = isDark ? "rgba(9,7,10,0.1)" : "rgba(230,240,255,0.16)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#00cc44";
+      ctx.fillStyle = accent;
       ctx.font = "14px monospace";
       columns.forEach((y, index) => {
         const text = chars[Math.floor(Math.random() * chars.length)];
@@ -156,9 +159,135 @@
     frame();
   }
 
+  function drawArena(canvas) {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let width = 0;
+    let height = 0;
+    let nodes = [];
+
+    function themeValue(name, fallback) {
+      return getComputedStyle(document.body).getPropertyValue(name).trim() || fallback;
+    }
+
+    function makeNodes() {
+      const count = Math.min(58, Math.max(26, Math.floor(width / 24)));
+      nodes = Array.from({ length: count }, (_, index) => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        speed: 0.18 + Math.random() * 0.46,
+        size: 1.2 + Math.random() * 2.2,
+        phase: Math.random() * Math.PI * 2,
+        lane: index % 4
+      }));
+    }
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width || window.innerWidth;
+      height = rect.height || window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      makeNodes();
+    }
+
+    function drawGrid(time, accent, accentAlt) {
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = document.body.classList.contains("dark") ? 0.16 : 0.12;
+      ctx.strokeStyle = accent;
+      for (let y = 28; y < height; y += 42) {
+        const offset = Math.sin(time / 1200 + y / 80) * 8;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y + offset);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = accentAlt;
+      for (let x = -width; x < width * 1.7; x += 96) {
+        ctx.beginPath();
+        ctx.moveTo(x + Math.sin(time / 1400) * 18, height);
+        ctx.lineTo(x + width * 0.36, 0);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawLanes(time, accent, accentAlt) {
+      const baseY = height * 0.22;
+      for (let index = 0; index < 4; index += 1) {
+        const y = baseY + index * height * 0.18 + Math.sin(time / 900 + index) * 14;
+        const sweep = ((time / (38 + index * 8)) % (width + 260)) - 130;
+        const gradient = ctx.createLinearGradient(sweep - 160, y, sweep + 180, y);
+        gradient.addColorStop(0, "transparent");
+        gradient.addColorStop(0.36, index % 2 ? accentAlt : accent);
+        gradient.addColorStop(1, "transparent");
+        ctx.globalAlpha = 0.42;
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sweep - 160, y);
+        ctx.bezierCurveTo(sweep - 52, y - 72, sweep + 82, y + 72, sweep + 190, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawNodes(time, accent, accentAlt) {
+      nodes.forEach((node, index) => {
+        if (!reduceMotion.matches) {
+          node.x += node.speed;
+          node.y += Math.sin(time / 900 + node.phase) * 0.18;
+          if (node.x > width + 24) {
+            node.x = -24;
+            node.y = Math.random() * height;
+          }
+        }
+        ctx.globalAlpha = 0.72;
+        ctx.fillStyle = node.lane % 2 ? accentAlt : accent;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (let otherIndex = index + 1; otherIndex < nodes.length; otherIndex += 1) {
+          const other = nodes[otherIndex];
+          const dx = node.x - other.x;
+          const dy = node.y - other.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance > 96) continue;
+          ctx.globalAlpha = (1 - distance / 96) * 0.18;
+          ctx.strokeStyle = node.lane % 2 ? accentAlt : accent;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(node.x, node.y);
+          ctx.lineTo(other.x, other.y);
+          ctx.stroke();
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function frame(time) {
+      const accent = themeValue("--accent", "#0066cc");
+      const accentAlt = themeValue("--accent-alt", "#ffcc00");
+      ctx.clearRect(0, 0, width, height);
+      drawGrid(time, accent, accentAlt);
+      drawLanes(time, accent, accentAlt);
+      drawNodes(time, accent, accentAlt);
+      if (!reduceMotion.matches) requestAnimationFrame(frame);
+    }
+
+    resize();
+    window.addEventListener("resize", resize);
+    requestAnimationFrame(frame);
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     initTheme();
     drawMatrix(qs("#matrixCanvas"));
+    drawArena(qs("#arenaCanvas"));
   });
 
   window.TPUtils = { qs, qsa, escapeHtml, formatDate, isAtLeast13, setMessage, spinner, renderNav, openModal, getParam, rolePills, roles };
