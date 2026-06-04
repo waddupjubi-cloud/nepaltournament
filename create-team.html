@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tournament Players | Create Team</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script defer src="https://kit.fontawesome.com/4f7d0f31d9.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/utils.js"></script>
+  <script defer src="js/supabaseClient.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/notifications.js"></script>
+  <script defer src="js/teams.js"></script>
+</head>
+<body data-page="create-team">
+  <header class="top-nav"></header>
+  <main class="page-shell narrow">
+    <section class="wide-panel">
+      <div class="section-heading"><h1>Create team</h1></div>
+      <form id="createTeamForm" class="stack">
+        <label class="field"><input id="teamName" required placeholder=" "><span>Team name</span></label>
+        <label class="field"><input id="teamTag" required maxlength="8" placeholder=" "><span>Team tag</span></label>
+        <label class="field file-field"><input id="teamLogo" type="file" accept="image/*"><span>Logo upload</span></label>
+        <button class="primary-button" type="submit">Create team</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

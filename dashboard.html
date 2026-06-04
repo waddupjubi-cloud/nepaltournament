@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tournament Players | Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/bracket.css">
+  <script defer src="https://kit.fontawesome.com/4f7d0f31d9.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/utils.js"></script>
+  <script defer src="js/supabaseClient.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/notifications.js"></script>
+  <script defer src="js/bracketGenerator.js"></script>
+  <script defer src="js/dashboard.js"></script>
+</head>
+<body data-page="dashboard">
+  <main class="dashboard-layout">
+    <aside id="dashSidebar" class="dash-sidebar"></aside>
+    <section class="dash-main">
+      <header class="dash-header">
+        <div><p class="eyebrow">Staff Dashboard</p><h1 id="dashTitle">Overview</h1></div>
+        <div class="toolbar">
+          <button class="icon-button theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+          <button id="switchUserView" class="secondary-button" type="button">User view</button>
+          <button id="staffLogout" class="secondary-button" type="button">Logout</button>
+        </div>
+      </header>
+      <div id="dashContent" class="dash-content"></div>
+    </section>
+    <aside id="activityPanel" class="activity-panel"></aside>
+  </main>
+</body>
+</html>

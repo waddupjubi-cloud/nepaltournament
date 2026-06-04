@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tournament Players | Tournament</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/bracket.css">
+  <script defer src="https://kit.fontawesome.com/4f7d0f31d9.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/utils.js"></script>
+  <script defer src="js/supabaseClient.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/notifications.js"></script>
+  <script defer src="js/bracketGenerator.js"></script>
+  <script defer src="js/tournament.js"></script>
+</head>
+<body data-page="tournament">
+  <header class="top-nav"></header>
+  <main class="page-shell">
+    <section id="tournamentDetail" class="wide-panel"></section>
+    <section class="wide-panel"><div id="bracketRoot" class="bracket-scroll"></div></section>
+    <section class="wide-panel"><h2>Matches</h2><div id="matchList" class="list-stack"></div></section>
+  </main>
+</body>
+</html>
