@@ -58,6 +58,76 @@ Then open `http://localhost:8080`.
 
 This project intentionally has no custom backend. That keeps hosting simple, but it means password resets, changing Auth email, and setting Auth custom claims must be done through Supabase’s dashboard or Edge Functions if you add them later. The app uses `profiles.staff_role` and RLS helper functions for authorization.
 
+## 6. Import Demo Teams And Staff
+
+Demo data lives in:
+
+- [data/demo-users.json](data/demo-users.json)
+- [data/demo-teams.json](data/demo-teams.json)
+- [data/demo-feed-posts.json](data/demo-feed-posts.json)
+
+This creates:
+
+- 3 admins: UserAdmin, PlayerAdmin, TournamentAdmin
+- 3 moderators: UserMod, PlayerMod, TournamentMod
+- 8 approved teams
+- 64 player accounts, with each team having EXP, JG, GD, MD, RM, Coach, SB1, and SB2 roles
+
+To import it locally, you need a Supabase backend key. Do not put this key in `js/config.js`.
+
+PowerShell:
+
+```powershell
+npm install
+$env:SUPABASE_URL='https://your-project.supabase.co'
+$env:SUPABASE_SERVICE_ROLE_KEY='your-secret-or-service-role-key'
+npm run import:demo
+```
+
+For automatic import after pushing to GitHub, add these repository secrets:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Then the workflow in [.github/workflows/import-demo-data.yml](.github/workflows/import-demo-data.yml) can import demo data when files in `data/` change.
+
+## 7. Enable Full Dashboard CRUD
+
+If you already ran the original schema, run this one-time SQL patch in Supabase SQL Editor:
+
+[supabase/dashboard-crud-policies.sql](supabase/dashboard-crud-policies.sql)
+
+Also run the realtime patch:
+
+[supabase/enable-realtime.sql](supabase/enable-realtime.sql)
+
+This unlocks the upgraded dashboard permissions:
+
+- Superadmin can manage all departments and delete non-superadmin profiles.
+- UserAdmin can approve player appeals and assign UserMod.
+- PlayerAdmin can manage teams and assign PlayerMod.
+- TournamentAdmin can manage tournaments and assign TournamentMod.
+- Moderators get department-specific update tools without admin promotion powers.
+
+## 8. Deploy Superadmin Auth Tools
+
+Creating or deleting real Supabase Auth users with passwords cannot be done safely from browser JavaScript. The dashboard calls this Edge Function instead:
+
+[supabase/functions/admin-users/index.ts](supabase/functions/admin-users/index.ts)
+
+Deploy it with the Supabase CLI:
+
+```powershell
+supabase login
+supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz
+```
+
+For GitHub auto-deploy, add this repository secret:
+
+- `SUPABASE_ACCESS_TOKEN`
+
+Then [.github/workflows/deploy-supabase-functions.yml](.github/workflows/deploy-supabase-functions.yml) can deploy the function when `supabase/functions/**` changes.
+
 ## File Map
 
 - `index.html`, `staff.html`: auth interfaces.
@@ -67,4 +137,7 @@ This project intentionally has no custom backend. That keeps hosting simple, but
 - `dashboard.html`: role-based staff dashboard.
 - `css/styles.css`, `css/bracket.css`: themes, responsive layout, bracket UI.
 - `js/*.js`: Supabase client, auth, pages, notifications, messages, bracket generation.
+- `data/*.json`: demo users, teams, and feed posts.
+- `scripts/import-demo-data.mjs`: imports demo JSON into Supabase.
+- `supabase/functions/admin-users`: Superadmin-only Auth user creation/deletion/password reset.
 - `supabase/schema.sql`, `supabase/seed.sql`: database setup.

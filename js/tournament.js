@@ -1,4 +1,7 @@
 (function () {
+  let tournamentListRealtime = false;
+  let tournamentDetailRealtimeId = null;
+
   async function loadTournamentList() {
     const U = window.TPUtils;
     const root = U.qs("#tournamentList");
@@ -31,9 +34,7 @@
       <div class="pill-row"><span class="pill">${U.escapeHtml(tournament.game || "Game")}</span><span class="pill">${tournament.team_capacity} teams</span><span class="pill">${U.formatDate(tournament.start_date)}</span></div>`;
     U.qs("#registerTournament")?.addEventListener("click", () => registerTeam(tournament.tournament_id));
     await loadMatches(tournament);
-    window.tpSupabase.channel(`matches:${id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${id}` }, () => loadMatches(tournament))
-      .subscribe();
+    startTournamentDetailRealtime(id, tournament);
   }
 
   async function loadMatches(tournament) {
@@ -75,8 +76,30 @@
     else alert(`${team.team_name} registration sent for approval.`);
   }
 
+  function startTournamentListRealtime() {
+    if (tournamentListRealtime) return;
+    tournamentListRealtime = true;
+    window.tpSupabase.channel("tournaments:list")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, loadTournamentList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, loadTournamentList)
+      .subscribe();
+  }
+
+  function startTournamentDetailRealtime(id, tournament) {
+    if (tournamentDetailRealtimeId === id) return;
+    tournamentDetailRealtimeId = id;
+    window.tpSupabase.channel(`tournaments:detail:${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments", filter: `tournament_id=eq.${id}` }, loadTournamentDetail)
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${id}` }, () => loadMatches(tournament))
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations", filter: `tournament_id=eq.${id}` }, loadTournamentDetail)
+      .subscribe();
+  }
+
   document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
-    if (document.body.dataset.page === "tournaments") loadTournamentList();
+    if (document.body.dataset.page === "tournaments") {
+      loadTournamentList();
+      startTournamentListRealtime();
+    }
     if (document.body.dataset.page === "tournament") loadTournamentDetail();
   }, 250));
 })();

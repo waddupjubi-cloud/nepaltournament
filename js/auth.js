@@ -28,6 +28,7 @@
     window.currentSession = session;
     window.currentProfile = profile;
     window.TPUtils.renderNav(profile);
+    startProfileRealtime(profile.id);
     return { session, profile };
   }
 
@@ -44,7 +45,20 @@
     }
     window.currentSession = session;
     window.currentProfile = profile;
+    startProfileRealtime(profile.id);
     return { session, profile };
+  }
+
+  let profileRealtimeId = null;
+  function startProfileRealtime(userId) {
+    if (profileRealtimeId === userId) return;
+    profileRealtimeId = userId;
+    db().channel(`profile:${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${userId}` }, (payload) => {
+        window.currentProfile = payload.new;
+        if (document.querySelector(".top-nav")) window.TPUtils.renderNav(payload.new);
+      })
+      .subscribe();
   }
 
   async function logout() {

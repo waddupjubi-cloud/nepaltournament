@@ -1,4 +1,7 @@
 (function () {
+  let teamsListRealtime = false;
+  let teamDetailRealtimeId = null;
+
   async function loadTeams() {
     const U = window.TPUtils;
     const root = U.qs("#teamList");
@@ -73,10 +76,34 @@
     window.TPMessages.renderTeamChat(id);
   }
 
+  function startTeamsRealtime() {
+    if (teamsListRealtime) return;
+    teamsListRealtime = true;
+    window.tpSupabase.channel("teams:list")
+      .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, loadTeams)
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_approval_requests" }, loadTeams)
+      .subscribe();
+  }
+
+  function startTeamDetailRealtime(teamId) {
+    if (teamDetailRealtimeId === teamId) return;
+    teamDetailRealtimeId = teamId;
+    window.tpSupabase.channel(`teams:detail:${teamId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "teams", filter: `team_id=eq.${teamId}` }, loadTeamDetail)
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_members", filter: `team_id=eq.${teamId}` }, loadTeamDetail)
+      .subscribe();
+  }
+
   document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
     const page = document.body.dataset.page;
-    if (page === "teams") loadTeams();
+    if (page === "teams") {
+      loadTeams();
+      startTeamsRealtime();
+    }
     if (page === "create-team") window.TPUtils.qs("#createTeamForm")?.addEventListener("submit", createTeam);
-    if (page === "team") loadTeamDetail();
+    if (page === "team") {
+      loadTeamDetail();
+      startTeamDetailRealtime(window.TPUtils.getParam("id"));
+    }
   }, 250));
 })();

@@ -1,0 +1,23 @@
+[
+  {
+    "author_email": "sahana.tournamentadmin@tournament.test",
+    "author_role": "tournamentadmin",
+    "title": "Nepal Open Cup registration is live",
+    "content": "Approved teams can now register for the Nepal Open Cup. Bracket previews and match schedules will update live.",
+    "is_pinned": true
+  },
+  {
+    "author_email": "kabir.tournamentmod@tournament.test",
+    "author_role": "tournamentmod",
+    "title": "Check-in rules for captains",
+    "content": "Team leaders and coaches must be ready before match time. Missing check-in windows may result in forfeits.",
+    "is_pinned": false
+  },
+  {
+    "author_email": "arjun.playeradmin@tournament.test",
+    "author_role": "playeradmin",
+    "title": "Roster approvals completed",
+    "content": "Eight demo teams have been approved with full eight-person rosters covering EXP, Jungle, Gold, Mid, Roam, Coach, and substitutes.",
+    "is_pinned": false
+  }
+]

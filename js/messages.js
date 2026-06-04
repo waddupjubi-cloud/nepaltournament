@@ -1,4 +1,6 @@
 (function () {
+  const teamChannels = new Map();
+
   async function renderTeamChat(teamId, rootId) {
     const U = window.TPUtils;
     const root = U.qs(rootId || "#teamChat");
@@ -34,9 +36,13 @@
       });
       input.value = "";
     });
-    window.tpSupabase.channel(`messages:${teamId}`)
+    if (teamChannels.has(teamId)) {
+      window.tpSupabase.removeChannel(teamChannels.get(teamId));
+    }
+    const channel = window.tpSupabase.channel(`messages:${teamId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `team_id=eq.${teamId}` }, load)
       .subscribe();
+    teamChannels.set(teamId, channel);
   }
   window.TPMessages = { renderTeamChat };
 })();

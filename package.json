@@ -1,0 +1,12 @@
+{
+  "name": "tournament-players",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import:demo": "node scripts/import-demo-data.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}
