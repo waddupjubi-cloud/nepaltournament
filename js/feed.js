@@ -8,6 +8,7 @@
       .from("feed_posts")
       .select("*, tournaments(tournament_id,name,status,start_date)")
       .order("is_pinned", { ascending: false })
+      .order("pin_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) {
@@ -21,9 +22,10 @@
             <p class="eyebrow">${U.escapeHtml(post.author_role || "admin")}</p>
             <h2>${U.escapeHtml(post.title)}</h2>
           </div>
-          ${post.is_pinned ? '<span class="pill warn">Pinned</span>' : ""}
+          ${post.is_pinned ? `<span class="pill warn">Pinned #${post.pin_order || 1}</span>` : ""}
         </div>
         <p>${U.escapeHtml(post.content)}</p>
+        <p class="muted">${U.escapeHtml(post.audience_type || "all")} - ${new Date(post.created_at).toLocaleString()}</p>
         ${post.media_url ? `<img src="${U.escapeHtml(post.media_url)}" alt="" style="width:100%;border-radius:8px">` : ""}
         ${post.tournament_id ? `<button class="secondary-button" type="button" data-view-tournament="${post.tournament_id}">View Tournament</button>` : ""}
       </article>`).join("") || '<p class="muted">No feed posts yet.</p>';

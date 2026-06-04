@@ -93,7 +93,7 @@
       <section class="modal" role="dialog" aria-modal="true">
         <div class="section-heading">
           <h2>${escapeHtml(title)}</h2>
-          <button class="icon-button" type="button" data-close-modal aria-label="Close">×</button>
+          <button class="icon-button" type="button" data-close-modal aria-label="Close">x</button>
         </div>
         <div>${bodyHtml}</div>
         <div class="toolbar" style="margin-top:16px">${actionsHtml || ""}</div>

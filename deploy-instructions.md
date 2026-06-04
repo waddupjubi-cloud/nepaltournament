@@ -43,6 +43,7 @@ bucket_id = 'team-logos' and auth.role() = 'authenticated'
 - Run `supabase/schema.sql`.
 - If this is an existing database, run `supabase/dashboard-crud-policies.sql`.
 - If this is an existing database, run `supabase/enable-realtime.sql`.
+- If this is an existing database, run `supabase/broadcast-management.sql`.
 - If team deletion fails, run `supabase/fix-team-delete.sql`.
 - Deploy the `admin-users` Edge Function for Superadmin Auth CRUD.
 - Create and seed the first superadmin.

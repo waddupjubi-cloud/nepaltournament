@@ -137,6 +137,16 @@ async function upsertTeams(seedTeams, usersByEmail) {
 }
 
 async function insertFeedPosts(seedPosts, usersByEmail) {
+  async function nextPinOrder() {
+    const { data, error } = await supabase.from("feed_posts").select("pin_order").eq("is_pinned", true);
+    if (error) throw error;
+    const used = new Set((data || []).map((post) => post.pin_order).filter(Boolean));
+    for (let index = 1; index <= 5; index += 1) {
+      if (!used.has(index)) return index;
+    }
+    return null;
+  }
+
   for (const post of seedPosts) {
     const author = usersByEmail.get(post.author_email.toLowerCase());
     const existing = await supabase.from("feed_posts").select("post_id").eq("title", post.title).maybeSingle();
@@ -145,12 +155,15 @@ async function insertFeedPosts(seedPosts, usersByEmail) {
       console.log(`Feed post exists: ${post.title}`);
       continue;
     }
+    const pinOrder = post.is_pinned ? (post.pin_order || await nextPinOrder()) : null;
     const { error } = await supabase.from("feed_posts").insert({
       author_id: author.id,
       author_role: post.author_role,
       title: post.title,
       content: post.content,
-      is_pinned: post.is_pinned
+      is_pinned: Boolean(pinOrder),
+      pin_order: pinOrder,
+      audience_type: post.audience_type || "all"
     });
     if (error) throw error;
     console.log(`Created feed post: ${post.title}`);

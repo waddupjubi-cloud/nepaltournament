@@ -69,7 +69,7 @@
                 <article class="bracket-match">
                   <div class="bracket-team ${aWin ? "winner" : ""}"><span>${U.escapeHtml(aName)}</span><strong>${match.team_a_score ?? ""}</strong></div>
                   <div class="bracket-team ${bWin ? "winner" : ""}"><span>${U.escapeHtml(bName)}</span><strong>${match.team_b_score ?? ""}</strong></div>
-                  <div class="match-meta">BO${match.best_of || 1} · ${U.formatDate(match.scheduled_start_utc)}</div>
+                  <div class="match-meta">BO${match.best_of || 1} - ${U.formatDate(match.scheduled_start_utc)}</div>
                 </article>`;
             }).join("")}
           </section>`).join("")}

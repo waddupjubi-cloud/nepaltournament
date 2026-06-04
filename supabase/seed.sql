@@ -18,8 +18,8 @@ where id = (
   select id from auth.users where email = 'bzumarhajn2@gmail.com' limit 1
 );
 
-insert into public.feed_posts (author_id, author_role, title, content, is_pinned)
-select id, 'superadmin', 'Welcome to Tournament Players', 'The arena is open. Watch this feed for tournament announcements, staff updates, and live match posts.', true
+insert into public.feed_posts (author_id, author_role, title, content, is_pinned, pin_order)
+select id, 'superadmin', 'Welcome to Tournament Players', 'The arena is open. Watch this feed for tournament announcements, staff updates, and live match posts.', true, 1
 from public.profiles
 where staff_role = 'superadmin'
 on conflict do nothing;

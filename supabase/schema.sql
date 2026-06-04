@@ -166,7 +166,13 @@ create table if not exists public.feed_posts (
   media_url text,
   tournament_id uuid references public.tournaments(tournament_id),
   is_pinned boolean not null default false,
-  created_at timestamptz not null default now()
+  pin_order integer,
+  audience_type text not null default 'all' check (audience_type in ('all','users','players','staff','role','individual')),
+  target_role text,
+  target_user_id uuid references public.profiles(id),
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  constraint feed_posts_pin_order_check check ((is_pinned = false and pin_order is null) or (is_pinned = true and pin_order between 1 and 5))
 );
 
 create table if not exists public.notifications (
@@ -232,6 +238,8 @@ create index if not exists teams_status_idx on public.teams(status);
 create index if not exists matches_tournament_idx on public.matches(tournament_id);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
 create index if not exists messages_team_idx on public.messages(team_id, created_at);
+create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id);
+create unique index if not exists feed_posts_pin_order_unique on public.feed_posts(pin_order) where is_pinned = true and pin_order is not null;
 
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
@@ -286,6 +294,43 @@ create trigger tournaments_updated_at before update on public.tournaments for ea
 
 drop trigger if exists matches_updated_at on public.matches;
 create trigger matches_updated_at before update on public.matches for each row execute function public.set_updated_at();
+
+drop trigger if exists feed_posts_updated_at on public.feed_posts;
+create trigger feed_posts_updated_at before update on public.feed_posts for each row execute function public.set_updated_at();
+
+create or replace function public.guard_feed_post_author_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_staff text;
+begin
+  if auth.role() = 'service_role' then
+    return new;
+  end if;
+
+  caller_staff := public.current_staff_role();
+  if caller_staff is null then
+    raise exception 'Only staff can manage broadcasts.';
+  end if;
+
+  if tg_op = 'INSERT' then
+    new.author_id := auth.uid();
+    new.author_role := caller_staff;
+    return new;
+  end if;
+
+  new.author_id := old.author_id;
+  new.author_role := old.author_role;
+  new.created_at := old.created_at;
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_feed_post_author_fields on public.feed_posts;
+create trigger guard_feed_post_author_fields before insert or update on public.feed_posts for each row execute function public.guard_feed_post_author_fields();
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -436,13 +481,41 @@ drop policy if exists "groups staff write" on public.group_stage_tables;
 create policy "groups staff write" on public.group_stage_tables for all using (public.is_staff(array['superadmin','tournamentadmin','tournamentmod'])) with check (public.is_staff(array['superadmin','tournamentadmin','tournamentmod']));
 
 drop policy if exists "feed read" on public.feed_posts;
-create policy "feed read" on public.feed_posts for select using (true);
+create policy "feed read" on public.feed_posts for select using (
+  audience_type = 'all'
+  or (audience_type = 'users' and auth.uid() is not null)
+  or (audience_type = 'players' and public.current_role() in ('player','superadmin'))
+  or (audience_type = 'staff' and public.current_staff_role() is not null)
+  or (audience_type = 'role' and (public.current_role() = target_role or public.current_staff_role() = target_role))
+  or (audience_type = 'individual' and target_user_id = auth.uid())
+  or author_id = auth.uid()
+  or public.current_staff_role() is not null
+);
 drop policy if exists "feed staff create" on public.feed_posts;
-create policy "feed staff create" on public.feed_posts for insert with check (public.is_staff(array['superadmin','tournamentadmin','tournamentmod']) and author_id = auth.uid());
+create policy "feed staff create" on public.feed_posts for insert with check (
+  public.current_staff_role() is not null
+  and author_id = auth.uid()
+  and coalesce(pin_order, 1) between 1 and 5
+);
 drop policy if exists "feed staff update" on public.feed_posts;
-create policy "feed staff update" on public.feed_posts for update using (author_id = auth.uid() or public.is_staff(array['superadmin'])) with check (author_id = auth.uid() or public.is_staff(array['superadmin']));
+create policy "feed staff update" on public.feed_posts for update
+using (
+  author_id = auth.uid()
+  or public.current_staff_role() = 'superadmin'
+  or (author_role in ('useradmin','playeradmin','tournamentadmin','usermod','playermod','tournamentmod') and public.current_staff_role() in ('useradmin','playeradmin','tournamentadmin'))
+)
+with check (
+  (author_id = auth.uid()
+    or public.current_staff_role() = 'superadmin'
+    or (author_role in ('useradmin','playeradmin','tournamentadmin','usermod','playermod','tournamentmod') and public.current_staff_role() in ('useradmin','playeradmin','tournamentadmin')))
+  and coalesce(pin_order, 1) between 1 and 5
+);
 drop policy if exists "feed staff delete" on public.feed_posts;
-create policy "feed staff delete" on public.feed_posts for delete using (author_id = auth.uid() or public.is_staff(array['superadmin']));
+create policy "feed staff delete" on public.feed_posts for delete using (
+  public.current_staff_role() = 'superadmin'
+  or (author_id = auth.uid() and author_role <> 'superadmin')
+  or (author_role in ('useradmin','playeradmin','tournamentadmin','usermod','playermod','tournamentmod') and public.current_staff_role() in ('useradmin','playeradmin','tournamentadmin'))
+);
 
 drop policy if exists "notifications own read" on public.notifications;
 create policy "notifications own read" on public.notifications for select using (user_id = auth.uid());

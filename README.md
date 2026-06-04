@@ -109,6 +109,18 @@ If team deletion fails in Player Management, run:
 
 [supabase/fix-team-delete.sql](supabase/fix-team-delete.sql)
 
+For the separate Broadcasts dashboard module, run:
+
+[supabase/broadcast-management.sql](supabase/broadcast-management.sql)
+
+Broadcast permissions:
+
+- Superadmin can create, edit, pin, unpin, order, and delete broadcasts.
+- Superadmin broadcasts can only be deleted by Superadmin.
+- Admin broadcasts can be deleted by Admins or Superadmin.
+- Moderator broadcasts can be deleted by their author, Superadmin, or any department Admin.
+- Only five broadcasts can be pinned at once, using pin order 1 to 5.
+
 This unlocks the upgraded dashboard permissions:
 
 - Superadmin can manage all departments and delete non-superadmin profiles.

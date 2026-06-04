@@ -1,12 +1,12 @@
 (function () {
   const roleModules = {
-    superadmin: ["overview", "users", "players", "tournaments", "audit"],
-    useradmin: ["users", "audit"],
-    usermod: ["users"],
-    playeradmin: ["players", "users", "audit"],
-    playermod: ["players"],
-    tournamentadmin: ["tournaments", "players", "audit"],
-    tournamentmod: ["tournaments"]
+    superadmin: ["overview", "broadcasts", "users", "players", "tournaments", "audit"],
+    useradmin: ["broadcasts", "users", "audit"],
+    usermod: ["broadcasts", "users"],
+    playeradmin: ["broadcasts", "players", "users", "audit"],
+    playermod: ["broadcasts", "players"],
+    tournamentadmin: ["broadcasts", "tournaments", "players", "audit"],
+    tournamentmod: ["broadcasts", "tournaments"]
   };
 
   const labels = {
@@ -14,6 +14,7 @@
     users: ["fa-users", "User Management"],
     players: ["fa-user-shield", "Player Management"],
     tournaments: ["fa-trophy", "Tournament Management"],
+    broadcasts: ["fa-bullhorn", "Broadcasts"],
     audit: ["fa-clipboard-list", "Audit Logs"]
   };
 
@@ -22,6 +23,7 @@
   const teamRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2"];
   const tournamentStatuses = ["draft", "registration", "in_progress", "completed"];
   const matchStatuses = ["scheduled", "checkin_open", "live", "paused", "finished", "forfeit"];
+  const audienceTypes = ["all", "users", "players", "staff", "role", "individual"];
   let activeModule = "overview";
   let realtimeStarted = false;
   let refreshTimer = null;
@@ -103,12 +105,46 @@
   }
 
   function canBroadcast() {
-    return hasRole("superadmin", "tournamentadmin", "tournamentmod");
+    return Boolean(me().staff_role);
+  }
+
+  function canDeleteBroadcast(post) {
+    const adminRoles = ["useradmin", "playeradmin", "tournamentadmin"];
+    const modRoles = ["usermod", "playermod", "tournamentmod"];
+    if (me().staff_role === "superadmin") return true;
+    if (post.author_role === "superadmin") return false;
+    if (adminRoles.includes(me().staff_role) && [...adminRoles, ...modRoles].includes(post.author_role)) return true;
+    if (post.author_id === me().id) return true;
+    return false;
+  }
+
+  function canEditBroadcast(post) {
+    return canDeleteBroadcast(post);
   }
 
   function optionList(options, selected, emptyLabel) {
     const empty = emptyLabel !== undefined ? `<option value="">${emptyLabel}</option>` : "";
     return empty + options.map((option) => `<option value="${option}" ${String(selected || "") === String(option) ? "selected" : ""}>${option}</option>`).join("");
+  }
+
+  function relativeTime(value) {
+    if (!value) return "not yet";
+    const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+    const units = [
+      ["year", 31536000],
+      ["month", 2592000],
+      ["day", 86400],
+      ["hour", 3600],
+      ["minute", 60],
+      ["second", 1]
+    ];
+    const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+    for (const [unit, amount] of units) {
+      if (Math.abs(seconds) >= amount || unit === "second") {
+        return formatter.format(Math.round(seconds / amount), unit);
+      }
+    }
+    return "just now";
   }
 
   async function logAction(action, targetId, details) {
@@ -159,6 +195,7 @@
     if (module === "users") return users();
     if (module === "players") return players();
     if (module === "tournaments") return tournaments();
+    if (module === "broadcasts") return broadcasts();
     if (module === "audit") return audit();
   }
 
@@ -435,7 +472,7 @@
   function renderTeamRequest(request) {
     return `<div class="item-card">
       <strong>${U().escapeHtml(request.teams?.team_name || request.team_id)}</strong>
-      <p class="muted">${U().escapeHtml(request.status)} · ${U().formatDate(request.created_at)}</p>
+      <p class="muted">${U().escapeHtml(request.status)} - ${U().formatDate(request.created_at)}</p>
       ${canManageTeams() && request.status === "pending" ? `
         <div class="toolbar">
           <button class="primary-button" type="button" data-approve-team="${request.request_id}" data-team="${request.team_id}">Approve</button>
@@ -563,6 +600,208 @@
     renderRows();
   }
 
+  async function broadcasts() {
+    const [postResult, profileResult, tournamentResult] = await Promise.all([
+      db().from("feed_posts").select("*").order("is_pinned", { ascending: false }).order("pin_order", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false }).limit(150),
+      db().from("profiles").select("id, full_name, ign, role, staff_role").order("full_name").limit(500),
+      db().from("tournaments").select("tournament_id, name").order("created_at", { ascending: false }).limit(200)
+    ]);
+    if (postResult.error) return U().qs("#dashContent").innerHTML = `<p class="message error">${U().escapeHtml(postResult.error.message)}</p>`;
+    const profiles = profileResult.data || [];
+    const tournamentsList = tournamentResult.data || [];
+    const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
+    const tournamentMap = new Map(tournamentsList.map((tournament) => [tournament.tournament_id, tournament]));
+    const posts = postResult.data || [];
+    const pinnedCount = posts.filter((post) => post.is_pinned).length;
+    U().qs("#dashContent").innerHTML = `
+      ${canBroadcast() ? renderBroadcastComposer(tournamentsList, profiles, pinnedCount) : ""}
+      <section class="wide-panel">
+        <div class="section-heading"><h2>Broadcast History</h2><span class="pill">${pinnedCount} / 5 pinned</span></div>
+        <div class="table-wrap">${renderBroadcastTable(posts, profileMap, tournamentMap)}</div>
+      </section>`;
+    bindBroadcastComposer(tournamentsList, profiles);
+    bindBroadcastActions(posts, tournamentsList, profiles);
+  }
+
+  function renderBroadcastComposer(tournamentsList, profiles, pinnedCount) {
+    return `<section class="wide-panel">
+      <div class="section-heading"><h2>Create Broadcast</h2><span class="pill good">${U().escapeHtml(me().staff_role)}</span></div>
+      <form id="broadcastForm" class="form-grid">
+        <label class="field"><input id="broadcastTitle" required placeholder=" "><span>Title</span></label>
+        <label class="field"><select id="broadcastAudience">${optionList(audienceTypes, "all")}</select><span>Audience</span></label>
+        <label class="field"><select id="broadcastTargetRole">${optionList([...userRoles, ...staffRoles, "superadmin"], "", "Only for role audience")}</select><span>Target role</span></label>
+        <label class="field"><select id="broadcastTargetUser">${optionList(profiles.map((profile) => profile.id), "", "Only for individual audience")}</select><span>Target user</span></label>
+        <label class="field"><select id="broadcastTournament">${optionList(tournamentsList.map((t) => t.tournament_id), "", "No tournament link")}</select><span>Tournament link</span></label>
+        <label class="field"><select id="broadcastPinOrder">${optionList([1, 2, 3, 4, 5], 1)}</select><span>Pin order</span></label>
+        <label class="field"><textarea id="broadcastContent" required placeholder=" "></textarea><span>Content</span></label>
+        <label class="check-row"><input id="broadcastPinned" type="checkbox" ${pinnedCount >= 5 ? "" : ""}> <span>Pin broadcast</span></label>
+        <button class="primary-button" type="submit">Post broadcast</button>
+        <p id="broadcastMessage" class="message"></p>
+      </form>
+    </section>`;
+  }
+
+  function renderBroadcastTable(posts, profileMap, tournamentMap) {
+    return `<table>
+      <thead><tr><th>Broadcast</th><th>Audience</th><th>Pin</th><th>Posted</th><th>Updated</th><th>Actions</th></tr></thead>
+      <tbody>${posts.map((post) => {
+        const author = profileMap.get(post.author_id);
+        const target = profileMap.get(post.target_user_id);
+        const tournament = tournamentMap.get(post.tournament_id);
+        const audience = post.audience_type === "individual"
+          ? `individual: ${target?.full_name || post.target_user_id || "unknown"}`
+          : post.audience_type === "role"
+            ? `role: ${post.target_role || "unknown"}`
+            : post.audience_type;
+        return `<tr>
+          <td><strong>${U().escapeHtml(post.title)}</strong><br><span class="muted">${U().escapeHtml(author?.full_name || "Unknown")} - ${U().escapeHtml(post.author_role || "")}${tournament ? ` - ${U().escapeHtml(tournament.name)}` : ""}</span></td>
+          <td>${U().escapeHtml(audience)}</td>
+          <td>${post.is_pinned ? `<span class="pill warn">#${post.pin_order || "-"}</span>` : '<span class="muted">No</span>'}</td>
+          <td>${U().escapeHtml(relativeTime(post.created_at))}<br><span class="muted">${new Date(post.created_at).toLocaleString()}</span></td>
+          <td>${post.updated_at ? `${U().escapeHtml(relativeTime(post.updated_at))}<br><span class="muted">${new Date(post.updated_at).toLocaleString()}</span>` : '<span class="muted">Never</span>'}</td>
+          <td><div class="toolbar">
+            ${canEditBroadcast(post) ? `<button class="secondary-button" type="button" data-edit-broadcast="${post.post_id}">Edit</button>` : ""}
+            ${canDeleteBroadcast(post) ? `<button class="secondary-button" type="button" data-delete-broadcast="${post.post_id}">Delete</button>` : ""}
+          </div></td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="6" class="muted">No broadcasts yet.</td></tr>'}</tbody>
+    </table>`;
+  }
+
+  function labelBroadcastSelects(tournamentsList, profiles) {
+    const labelOptions = (selector, items, idKey, labeler) => {
+      const select = U().qs(selector);
+      if (!select) return;
+      Array.from(select.options).forEach((option) => {
+        const item = items.find((entry) => entry[idKey] === option.value);
+        if (item) option.textContent = labeler(item);
+      });
+    };
+    labelOptions("#broadcastTournament", tournamentsList, "tournament_id", (item) => item.name);
+    labelOptions("#broadcastTargetUser", profiles, "id", (item) => `${item.full_name} (${item.ign || item.role || "user"})`);
+  }
+
+  async function freePinSlot(pinOrder, postId) {
+    const { data: occupied, error: lookupError } = await db().from("feed_posts").select("*").eq("is_pinned", true).eq("pin_order", pinOrder);
+    if (lookupError) throw lookupError;
+    const blockers = (occupied || []).filter((post) => post.post_id !== postId);
+    if (!blockers.length) return;
+    if (blockers.some((post) => !canEditBroadcast(post))) {
+      throw new Error(`Pin slot ${pinOrder} is occupied by a broadcast you cannot replace.`);
+    }
+    let query = db().from("feed_posts").update({ is_pinned: false, pin_order: null }).eq("is_pinned", true).eq("pin_order", pinOrder);
+    if (postId) query = query.neq("post_id", postId);
+    const { error } = await query;
+    if (error) throw new Error(`Pin slot ${pinOrder} is occupied by a broadcast you cannot replace.`);
+  }
+
+  function readBroadcastForm(prefix) {
+    const audience = U().qs(`#${prefix}Audience`).value;
+    const isPinned = U().qs(`#${prefix}Pinned`).checked;
+    return {
+      title: U().qs(`#${prefix}Title`).value.trim(),
+      content: U().qs(`#${prefix}Content`).value.trim(),
+      tournament_id: U().qs(`#${prefix}Tournament`).value || null,
+      audience_type: audience,
+      target_role: audience === "role" ? U().qs(`#${prefix}TargetRole`).value || null : null,
+      target_user_id: audience === "individual" ? U().qs(`#${prefix}TargetUser`).value || null : null,
+      is_pinned: isPinned,
+      pin_order: isPinned ? Number(U().qs(`#${prefix}PinOrder`).value) : null
+    };
+  }
+
+  function validateBroadcastPayload(payload) {
+    if (payload.audience_type === "role" && !payload.target_role) throw new Error("Choose a target role.");
+    if (payload.audience_type === "individual" && !payload.target_user_id) throw new Error("Choose a target user.");
+    if (payload.is_pinned && (!payload.pin_order || payload.pin_order < 1 || payload.pin_order > 5)) throw new Error("Pinned broadcasts must use pin order 1 to 5.");
+  }
+
+  function bindBroadcastComposer(tournamentsList, profiles) {
+    labelBroadcastSelects(tournamentsList, profiles);
+    U().qs("#broadcastForm")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        U().setMessage("#broadcastMessage", "Posting broadcast...");
+        const payload = {
+          ...readBroadcastForm("broadcast"),
+          author_id: me().id,
+          author_role: me().staff_role
+        };
+        validateBroadcastPayload(payload);
+        if (payload.is_pinned) await freePinSlot(payload.pin_order);
+        const { data, error } = await db().from("feed_posts").insert(payload).select("post_id").single();
+        if (error) throw error;
+        await logAction("create_broadcast", data.post_id, payload);
+        U().setMessage("#broadcastMessage", "Broadcast posted.", "success");
+        U().qs("#broadcastForm").reset();
+        broadcasts();
+      } catch (error) {
+        U().setMessage("#broadcastMessage", error.message, "error");
+      }
+    });
+  }
+
+  function bindBroadcastActions(posts, tournamentsList, profiles) {
+    U().qsa("[data-edit-broadcast]").forEach((button) => button.addEventListener("click", () => openBroadcastEditor(posts.find((post) => post.post_id === button.dataset.editBroadcast), tournamentsList, profiles)));
+    U().qsa("[data-delete-broadcast]").forEach((button) => button.addEventListener("click", async () => {
+      if (!confirm("Delete this broadcast?")) return;
+      const { error } = await db().from("feed_posts").delete().eq("post_id", button.dataset.deleteBroadcast);
+      if (error) alert(error.message);
+      else {
+        await logAction("delete_broadcast", button.dataset.deleteBroadcast, {});
+        broadcasts();
+      }
+    }));
+  }
+
+  function openBroadcastEditor(post, tournamentsList, profiles) {
+    if (!post) return;
+    U().openModal("Edit Broadcast", `
+      <form id="editBroadcastForm" class="form-grid">
+        <label class="field"><input id="editBroadcastTitle" value="${U().escapeHtml(post.title)}" required placeholder=" "><span>Title</span></label>
+        <label class="field"><select id="editBroadcastAudience">${optionList(audienceTypes, post.audience_type || "all")}</select><span>Audience</span></label>
+        <label class="field"><select id="editBroadcastTargetRole">${optionList([...userRoles, ...staffRoles, "superadmin"], post.target_role || "", "Only for role audience")}</select><span>Target role</span></label>
+        <label class="field"><select id="editBroadcastTargetUser">${optionList(profiles.map((profile) => profile.id), post.target_user_id || "", "Only for individual audience")}</select><span>Target user</span></label>
+        <label class="field"><select id="editBroadcastTournament">${optionList(tournamentsList.map((t) => t.tournament_id), post.tournament_id || "", "No tournament link")}</select><span>Tournament link</span></label>
+        <label class="field"><select id="editBroadcastPinOrder">${optionList([1, 2, 3, 4, 5], post.pin_order || 1)}</select><span>Pin order</span></label>
+        <label class="field"><textarea id="editBroadcastContent" required placeholder=" ">${U().escapeHtml(post.content)}</textarea><span>Content</span></label>
+        <label class="check-row"><input id="editBroadcastPinned" type="checkbox" ${post.is_pinned ? "checked" : ""}> <span>Pin broadcast</span></label>
+        <button class="primary-button" type="submit">Save broadcast</button>
+        <p id="editBroadcastMessage" class="message"></p>
+      </form>`);
+    labelBroadcastSelects(tournamentsList, profiles);
+    const userSelect = U().qs("#editBroadcastTargetUser");
+    if (userSelect) {
+      Array.from(userSelect.options).forEach((option) => {
+        const profile = profiles.find((entry) => entry.id === option.value);
+        if (profile) option.textContent = `${profile.full_name} (${profile.ign || profile.role || "user"})`;
+      });
+    }
+    const tournamentSelect = U().qs("#editBroadcastTournament");
+    if (tournamentSelect) {
+      Array.from(tournamentSelect.options).forEach((option) => {
+        const tournament = tournamentsList.find((entry) => entry.tournament_id === option.value);
+        if (tournament) option.textContent = tournament.name;
+      });
+    }
+    U().qs("#editBroadcastForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        U().setMessage("#editBroadcastMessage", "Saving broadcast...");
+        const payload = readBroadcastForm("editBroadcast");
+        validateBroadcastPayload(payload);
+        if (payload.is_pinned) await freePinSlot(payload.pin_order, post.post_id);
+        const { error } = await db().from("feed_posts").update(payload).eq("post_id", post.post_id);
+        if (error) throw error;
+        await logAction("update_broadcast", post.post_id, payload);
+        U().setMessage("#editBroadcastMessage", "Broadcast saved.", "success");
+        broadcasts();
+      } catch (error) {
+        U().setMessage("#editBroadcastMessage", error.message, "error");
+      }
+    });
+  }
+
   async function tournaments() {
     const [tournamentResult, teamResult, registrationResult, matchResult] = await Promise.all([
       db().from("tournaments").select("*").order("created_at", { ascending: false }),
@@ -575,7 +814,6 @@
     U().qs("#dashContent").innerHTML = `
       ${canCreateTournaments() ? renderCreateTournamentPanel() : ""}
       ${canManageMatches() ? renderCreateMatchPanel(tournamentList, teamsList) : ""}
-      ${canBroadcast() ? renderBroadcastPanel(tournamentList) : ""}
       <section class="wide-panel"><h2>Tournaments</h2><div class="table-wrap">${renderTournamentTable(tournamentList)}</div></section>
       <section class="wide-panel"><h2>Registrations</h2><div class="list-stack">${(registrationResult.data || []).map(renderRegistration).join("") || '<p class="muted">No registrations yet.</p>'}</div></section>
       <section class="wide-panel"><h2>Matches</h2><div class="table-wrap">${renderMatchTable(matchResult.data || [])}</div></section>`;
@@ -609,16 +847,6 @@
     </form></section>`;
   }
 
-  function renderBroadcastPanel(tournamentList) {
-    return `<section class="wide-panel"><h2>Broadcast To Feed</h2><form id="broadcastForm" class="form-grid">
-      <label class="field"><input id="broadcastTitle" required placeholder=" "><span>Title</span></label>
-      <label class="field"><select id="broadcastTournament">${optionList(tournamentList.map((t) => t.tournament_id), "", "No tournament link")}</select><span>Tournament link</span></label>
-      <label class="field"><textarea id="broadcastContent" required placeholder=" "></textarea><span>Content</span></label>
-      <label class="check-row"><input id="broadcastPinned" type="checkbox"> <span>Pin post</span></label>
-      <button class="primary-button" type="submit">Post</button>
-    </form></section>`;
-  }
-
   function renderTournamentTable(tournamentList) {
     return `<table><thead><tr><th>Name</th><th>Status</th><th>Capacity</th><th>Start</th><th>Actions</th></tr></thead><tbody>
       ${tournamentList.map((t) => `<tr>
@@ -637,7 +865,7 @@
   function renderRegistration(registration) {
     return `<div class="item-card">
       <strong>${U().escapeHtml(registration.teams?.team_name || registration.team_id)}</strong>
-      <p class="muted">${U().escapeHtml(registration.tournaments?.name || registration.tournament_id)} · ${U().escapeHtml(registration.status)}</p>
+      <p class="muted">${U().escapeHtml(registration.tournaments?.name || registration.tournament_id)} - ${U().escapeHtml(registration.status)}</p>
       ${canManageMatches() && registration.status === "pending" ? `
         <div class="toolbar">
           <button class="primary-button" type="button" data-approve-registration="${registration.registration_id}">Approve</button>
@@ -705,23 +933,6 @@
         tournaments();
       }
     });
-    U().qs("#broadcastForm")?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const payload = {
-        author_id: me().id,
-        author_role: me().staff_role,
-        title: U().qs("#broadcastTitle").value.trim(),
-        content: U().qs("#broadcastContent").value.trim(),
-        tournament_id: U().qs("#broadcastTournament").value || null,
-        is_pinned: U().qs("#broadcastPinned").checked
-      };
-      const { data, error } = await db().from("feed_posts").insert(payload).select("post_id").single();
-      if (error) alert(error.message);
-      else {
-        await logAction("broadcast_feed_post", data.post_id, payload);
-        tournaments();
-      }
-    });
   }
 
   function bindTournamentActions(tournamentList) {
@@ -785,7 +996,7 @@
   }
 
   function bindMatchActions(matches, tournamentList, teamsList) {
-    [U().qs("#matchTournament"), U().qs("#broadcastTournament")].forEach((select) => {
+    [U().qs("#matchTournament")].forEach((select) => {
       if (!select) return;
       Array.from(select.options).forEach((option) => {
         const tournament = tournamentList.find((t) => t.tournament_id === option.value);
