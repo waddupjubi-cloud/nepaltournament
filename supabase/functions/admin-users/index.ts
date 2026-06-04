@@ -9,7 +9,7 @@ const corsHeaders = {
 
 type AdminAction = "createUser" | "deleteUser" | "updatePassword";
 const staffRoles = ["usermod", "playermod", "tournamentmod", "useradmin", "playeradmin", "tournamentadmin"];
-const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole"];
+const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole", "founder", "leader"];
 
 function uniqueStrings(values: unknown[], allowed?: string[]) {
   const result = [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];

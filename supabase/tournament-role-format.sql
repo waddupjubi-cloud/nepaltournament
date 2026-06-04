@@ -13,7 +13,7 @@ alter table public.profiles
   add constraint profiles_staff_roles_check
   check (staff_roles <@ array['usermod','playermod','tournamentmod','useradmin','playeradmin','tournamentadmin','superadmin']),
   add constraint profiles_player_roles_check
-  check (player_roles <@ array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole']);
+  check (player_roles <@ array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole','founder','leader']);
 
 update public.profiles
 set staff_roles = array[staff_role::text]
@@ -22,6 +22,10 @@ where staff_role is not null and coalesce(array_length(staff_roles, 1), 0) = 0;
 update public.profiles
 set player_roles = array['multirole']
 where role in ('player','superadmin') and coalesce(array_length(player_roles, 1), 0) = 0;
+
+update public.profiles
+set player_roles = array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole','founder','leader']
+where role = 'superadmin';
 
 alter table public.matches
   add column if not exists phase text,

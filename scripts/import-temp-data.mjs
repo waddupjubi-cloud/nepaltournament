@@ -24,6 +24,9 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   realtime: { transport: WebSocket }
 });
 
+const coreRoles = ["exp", "jg", "gd", "md", "rm"];
+const superadminPlayerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole", "founder", "leader"];
+
 async function readJson(relativePath) {
   return JSON.parse(await readFile(path.join(root, relativePath), "utf8"));
 }
@@ -75,15 +78,27 @@ async function ensureAuthUsers(seedUsers) {
       .eq("id", user.id)
       .maybeSingle();
     if (existingProfileError) throw existingProfileError;
+    const selectedPlayerRoles = seed.role === "superadmin"
+      ? superadminPlayerRoles
+      : seed.player_roles || (seed.role === "player" ? ["multirole"] : []);
     const profile = {
       id: user.id,
       full_name: seed.full_name,
       username: existingProfile?.username || requestedUsername || await generateUsername(seed.full_name),
       ign: seed.ign,
+      game_id: seed.game_id || null,
+      server_id: seed.server_id || null,
+      favorite_hero: seed.favorite_hero || null,
+      favorite_quote: seed.favorite_quote || null,
+      motto: seed.motto || null,
+      tagline: seed.tagline || null,
+      likes: seed.likes || null,
+      dislikes: seed.dislikes || null,
+      bio: seed.bio || null,
       role: seed.role || "user",
       staff_role: seed.staff_role || null,
       staff_roles: seed.staff_roles || (seed.staff_role ? [seed.staff_role] : []),
-      player_roles: seed.player_roles || (seed.role === "player" ? ["multirole"] : []),
+      player_roles: selectedPlayerRoles,
       is_verified: true,
       is_player_approved: seed.role === "player" || Boolean(seed.staff_role?.includes("player"))
     };
@@ -183,7 +198,10 @@ async function insertFeedPosts(seedPosts, usersByEmail) {
       content: post.content,
       is_pinned: Boolean(pinOrder),
       pin_order: pinOrder,
-      audience_type: post.audience_type || "all"
+      audience_type: post.audience_type || "all",
+      target_role: post.target_role || null,
+      target_user_id: null,
+      target_team_id: null
     });
     if (error) throw error;
     console.log(`Created feed post: ${post.title}`);
@@ -195,11 +213,37 @@ async function main() {
   const teams = await readJson("data/temp-teams.json");
   const feedPosts = await readJson("data/temp-feed-posts.json");
 
+  ensureSeedPlayerRoles(users, teams);
   const usersByEmail = await ensureAuthUsers(users);
   await upsertTeams(teams, usersByEmail);
   await insertFeedPosts(feedPosts, usersByEmail);
 
   console.log("Temporary JSON data import complete.");
+}
+
+function ensureSeedPlayerRoles(users, teams) {
+  const rolesByEmail = new Map();
+  for (const team of teams) {
+    for (const member of team.roster || []) {
+      const email = member.email.toLowerCase();
+      const roles = rolesByEmail.get(email) || new Set();
+      const normalized = member.role === "gd" ? "gd" : member.role;
+      if (coreRoles.includes(normalized)) roles.add(normalized);
+      if (member.email.toLowerCase() === team.founder_email.toLowerCase()) roles.add("founder");
+      if (member.email.toLowerCase() === team.leader_email.toLowerCase()) roles.add("leader");
+      rolesByEmail.set(email, roles);
+    }
+  }
+  users.forEach((user, index) => {
+    if (user.role === "superadmin") {
+      user.player_roles = superadminPlayerRoles;
+      return;
+    }
+    const roles = rolesByEmail.get(user.email.toLowerCase()) || new Set();
+    if (!roles.size) roles.add(coreRoles[index % coreRoles.length]);
+    if (user.player_roles?.includes("multirole")) roles.add("multirole");
+    user.player_roles = [...new Set([...(user.player_roles || []), ...roles])];
+  });
 }
 
 main().catch((error) => {

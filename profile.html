@@ -12,6 +12,7 @@
   <script defer src="js/supabaseClient.js"></script>
   <script defer src="js/auth.js"></script>
   <script defer src="js/notifications.js"></script>
+  <script defer src="js/messages.js"></script>
   <script defer src="js/profile.js"></script>
 </head>
 <body data-page="profile">
@@ -32,6 +33,15 @@
         <button class="primary-button" type="submit">Submit appeal</button>
       </form>
     </section>
+    <section id="notifications" class="wide-panel">
+      <div class="section-heading"><h2>Alerts</h2><button id="markAlertsRead" class="secondary-button" type="button">Mark read</button></div>
+      <div id="alertList" class="list-stack"></div>
+    </section>
+    <section id="messages" class="wide-panel messenger-panel">
+      <div class="section-heading"><h2>Messages</h2><span class="pill good">Direct chat</span></div>
+      <div id="messengerRoot"></div>
+    </section>
   </main>
+  <div id="modalRoot"></div>
 </body>
 </html>

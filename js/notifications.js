@@ -17,9 +17,43 @@
     await refresh();
     window.tpSupabase
       .channel(`notifications:${profile.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` }, () => {
+        refresh();
+        renderAlertList();
+      })
       .subscribe();
   }
+  async function renderAlertList() {
+    const U = window.TPUtils;
+    const root = U.qs("#alertList");
+    if (!root || !window.currentProfile) return;
+    const { data, error } = await window.tpSupabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", window.currentProfile.id)
+      .order("created_at", { ascending: false })
+      .limit(80);
+    if (error) return root.innerHTML = `<p class="message error">${U.escapeHtml(error.message)}</p>`;
+    root.innerHTML = (data || []).map((item) => `
+      <article class="alert-card ${item.is_read ? "" : "is-unread"}">
+        <div>
+          <strong>${U.escapeHtml(item.title || "Alert")}</strong>
+          <p>${U.escapeHtml(item.message || "")}</p>
+          <small class="muted">${new Date(item.created_at).toLocaleString()}</small>
+        </div>
+        ${item.link ? `<a class="secondary-button compact-button" href="${U.escapeHtml(item.link)}">Open</a>` : ""}
+      </article>`).join("") || '<p class="muted">No alerts yet.</p>';
+  }
+  async function markAlertsRead() {
+    if (!window.currentProfile) return;
+    await window.tpSupabase.from("notifications").update({ is_read: true }).eq("user_id", window.currentProfile.id).eq("is_read", false);
+    renderAlertList();
+    initNotifications();
+  }
   document.addEventListener("DOMContentLoaded", () => setTimeout(initNotifications, 200));
-  window.TPNotifications = { initNotifications };
+  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+    renderAlertList();
+    window.TPUtils.qs("#markAlertsRead")?.addEventListener("click", markAlertsRead);
+  }, 260));
+  window.TPNotifications = { initNotifications, renderAlertList };
 })();

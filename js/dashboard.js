@@ -23,13 +23,13 @@
   const protectedStaffRoles = ["superadmin", ...staffRoles];
   const adminStaffRoles = ["useradmin", "playeradmin", "tournamentadmin"];
   const modStaffRoles = ["usermod", "playermod", "tournamentmod"];
-  const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole"];
+  const playerRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole", "founder", "leader"];
   const teamRoles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2"];
   const staffRolePriority = ["superadmin", "useradmin", "playeradmin", "tournamentadmin", "usermod", "playermod", "tournamentmod"];
   const previewRoleStorageKey = "tp-dashboard-preview-role";
   const tournamentStatuses = ["draft", "registration", "in_progress", "completed"];
   const matchStatuses = ["scheduled", "checkin_open", "live", "paused", "finished", "forfeit"];
-  const audienceTypes = ["all", "users", "players", "staff", "role", "individual"];
+  const audienceTypes = ["all", "users", "players", "staff", "role", "individual", "team"];
   let activeModule = "overview";
   let realtimeStarted = false;
   let refreshTimer = null;
@@ -192,8 +192,9 @@
 
   function actionDepartment(action = "") {
     const value = String(action).toLowerCase();
-    if (/user|password|profile|appeal/.test(value)) return "User";
-    if (/team|player|member|approval/.test(value)) return "Player";
+    if (/broadcast|feed|post|pin/.test(value)) return "Broadcast";
+    if (/user|password|profile|appeal|verify/.test(value)) return "User Management";
+    if (/team|player|member|approval/.test(value)) return "Player Management";
     if (/tournament|match|bracket|registration/.test(value)) return "Tournament";
     return "General";
   }
@@ -658,7 +659,10 @@
     U().qs("#dashContent").innerHTML = `
       ${canCreateUsers() ? renderCreateUserPanel() : ""}
       <section class="table-wrap">
-        <label class="field"><input id="userSearch" placeholder=" "><span>Search users by name, username, IGN, or role</span></label>
+        <div class="filter-grid dashboard-filter-bar">
+          <label class="field"><input id="userSearch" placeholder=" "><span>Search users by name, username, IGN, or role</span></label>
+          <label class="field"><select id="userPlayerStatusFilter"><option value="all">All player states</option><option value="approved">Player approved</option><option value="pending">Player pending</option><option value="verified">Verified users</option><option value="unverified">Unverified users</option></select><span>Status</span></label>
+        </div>
         <table>
           <thead><tr><th>Name</th><th>Role</th><th>Player Roles</th><th>Staff</th><th>Verified</th><th>Actions</th></tr></thead>
           <tbody id="userRows">${renderUserRows(data)}</tbody>
@@ -667,10 +671,12 @@
       <section class="wide-panel"><h2>Player Appeals</h2><div id="appealsList" class="list-stack"></div></section>`;
     bindCreateUser();
     bindUserActions(data);
-    U().qs("#userSearch")?.addEventListener("input", (event) => {
-      U().qs("#userRows").innerHTML = renderUserRows(data, event.target.value);
+    const applyUserFilters = () => {
+      U().qs("#userRows").innerHTML = renderUserRows(data, U().qs("#userSearch")?.value || "", U().qs("#userPlayerStatusFilter")?.value || "all");
       bindUserActions(data);
-    });
+    };
+    U().qs("#userSearch")?.addEventListener("input", applyUserFilters);
+    U().qs("#userPlayerStatusFilter")?.addEventListener("change", applyUserFilters);
     loadAppeals();
   }
 
@@ -691,18 +697,24 @@
     </section>`;
   }
 
-  function renderUserRows(profiles, query = "") {
+  function renderUserRows(profiles, query = "", status = "all") {
     const term = query.trim().toLowerCase();
-    const filtered = term
-      ? profiles.filter((profile) => [
+    const filtered = profiles.filter((profile) => {
+      const matchesTerm = !term || [
         profile.full_name,
         profile.username,
         profile.ign,
         profile.role,
         ...playerRolesFor(profile),
         ...staffRolesFor(profile)
-      ].filter(Boolean).join(" ").toLowerCase().includes(term))
-      : profiles;
+      ].filter(Boolean).join(" ").toLowerCase().includes(term);
+      const matchesStatus = status === "all"
+        || (status === "approved" && profile.is_player_approved)
+        || (status === "pending" && (profile.role === "player" || playerRolesFor(profile).length) && !profile.is_player_approved)
+        || (status === "verified" && profile.is_verified)
+        || (status === "unverified" && !profile.is_verified);
+      return matchesTerm && matchesStatus;
+    });
     return filtered.map(renderUserRow).join("") || `<tr><td colspan="6" class="muted">No users match that search.</td></tr>`;
   }
 
@@ -719,12 +731,19 @@
 
   function renderUserActions(p) {
     const actions = [];
+    if (canManageUserVerification(p)) {
+      actions.push(`<button class="secondary-button" type="button" data-toggle-verify-user="${p.id}">${p.is_verified ? "Unverify" : "Verify"}</button>`);
+    }
     if (canEditBasicUsers()) actions.push(`<button class="secondary-button" type="button" data-edit-user="${p.id}">Edit</button>`);
     if (canResetPassword(p)) actions.push(`<button class="secondary-button" type="button" data-reset-password="${p.id}">Password</button>`);
     if (canDeleteUsers(p)) actions.push(`<button class="secondary-button" type="button" data-delete-user="${p.id}">Delete</button>`);
     if (!actions.length) return '<span class="muted">Read only</span>';
     if (hasStaffRole(p, "superadmin")) return '<span class="pill">Protected</span>';
     return actions.join("");
+  }
+
+  function canManageUserVerification(profile) {
+    return !hasStaffRole(profile, "superadmin") && hasRole("superadmin", "useradmin");
   }
 
   function staffRoleChoicesForCurrentUser() {
@@ -783,6 +802,16 @@
       }
     }));
     U().qsa("[data-reset-password]").forEach((button) => button.addEventListener("click", () => openPasswordReset(button.dataset.resetPassword)));
+    U().qsa("[data-toggle-verify-user]").forEach((button) => button.addEventListener("click", async () => {
+      const profile = profiles.find((p) => p.id === button.dataset.toggleVerifyUser);
+      if (!profile || !canManageUserVerification(profile)) return;
+      const nextValue = !profile.is_verified;
+      if (!confirm(`${nextValue ? "Verify" : "Unverify"} ${profile.full_name || profile.username || "this user"}?`)) return;
+      const { error } = await db().from("profiles").update({ is_verified: nextValue }).eq("id", profile.id);
+      if (error) return alert(error.message);
+      await logAction(nextValue ? "verify_user" : "unverify_user", profile.id, { username: profile.username, full_name: profile.full_name });
+      users();
+    }));
   }
 
   function openPasswordReset(userId) {
@@ -911,24 +940,84 @@
   }
 
   async function players() {
-    const [requests, teams, playerProfiles] = await Promise.all([
+    const [requests, teams, playerProfiles, membershipsResult] = await Promise.all([
       db().from("team_approval_requests").select("*, teams(team_name, team_tag)").order("created_at", { ascending: false }).limit(100),
       db().from("teams").select("*").order("created_at", { ascending: false }).limit(200),
-      db().from("profiles").select("id, full_name, ign, role").in("role", ["player", "superadmin"]).order("full_name")
+      db().from("profiles").select("id, full_name, ign, role, player_roles").in("role", ["player", "superadmin"]).order("full_name"),
+      db().from("team_members").select("team_id, player_id, left_at").is("left_at", null).limit(1000)
     ]);
     const players = playerProfiles.data || [];
+    const teamRequests = requests.data || [];
+    const pendingRequests = teamRequests.filter((request) => request.status === "pending");
+    const approvedRequests = teamRequests.filter((request) => request.status === "approved");
+    const rejectedRequests = teamRequests.filter((request) => request.status === "rejected");
     U().qs("#dashContent").innerHTML = `
-      <section class="wide-panel"><h2>Team Approvals</h2><div class="list-stack">
-        ${(requests.data || []).map(renderTeamRequest).join("") || '<p class="muted">No team approval requests.</p>'}
-      </div></section>
+      <section class="wide-panel">
+        <div class="section-heading"><h2>Team Approval Search</h2><span class="pill">${teamRequests.length} requests</span></div>
+        <div class="filter-grid dashboard-filter-bar">
+          <label class="field"><input id="teamApprovalSearch" type="search" placeholder=" "><span>Search team approvals</span></label>
+          <label class="field"><select id="teamApprovalStatusFilter"><option value="all">All statuses</option><option value="pending">Pending only</option><option value="approved">Approved only</option><option value="rejected">Rejected only</option></select><span>Status</span></label>
+        </div>
+      </section>
+      <section class="wide-panel">
+        <div class="section-heading"><h2>Pending Team Approvals</h2><span class="pill warn">${pendingRequests.length} waiting</span></div>
+        <div id="pendingTeamRequests" class="list-stack">${pendingRequests.map(renderTeamRequest).join("") || '<p class="muted">No pending team approval requests.</p>'}</div>
+      </section>
+      <section class="wide-panel">
+        <div class="section-heading"><h2>Approved Teams</h2><span class="pill good">${approvedRequests.length} approved</span></div>
+        <div id="approvedTeamRequests" class="list-stack">
+          ${approvedRequests.map(renderTeamRequest).join("") || '<p class="muted">No approved team requests yet.</p>'}
+        </div>
+        <details class="mini-card" ${rejectedRequests.length ? "" : "open"}><summary>Rejected requests (${rejectedRequests.length})</summary><div id="rejectedTeamRequests" class="list-stack" style="margin-top:12px;">${rejectedRequests.map(renderTeamRequest).join("") || '<p class="muted">No rejected team requests.</p>'}</div></details>
+      </section>
       <section class="wide-panel">
         <div class="section-heading"><h2>Teams</h2>${canManageTeams() ? '<button id="createStaffTeam" class="primary-button" type="button">Create team</button>' : ""}</div>
-        <div class="table-wrap"><table><thead><tr><th>Team</th><th>Status</th><th>Roster</th><th>Actions</th></tr></thead><tbody>
+        <div class="filter-grid dashboard-filter-bar">
+          <label class="field"><input id="teamSearch" type="search" placeholder=" "><span>Search teams</span></label>
+          <label class="field"><select id="teamStatusFilter"><option value="all">All team states</option><option value="recruiting">Recruiting</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="disbanded">Disbanded</option></select><span>Status</span></label>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Team</th><th>Status</th><th>Roster</th><th>Actions</th></tr></thead><tbody id="teamRows">
           ${(teams.data || []).map((team) => renderTeamRow(team)).join("")}
         </tbody></table></div>
       </section>`;
     bindTeamRequests();
-    bindTeamActions(teams.data || [], players);
+    bindTeamActions(teams.data || [], players, membershipsResult.data || []);
+    bindTeamApprovalFilters(teamRequests);
+    bindTeamTableFilters(teams.data || [], players, membershipsResult.data || []);
+  }
+
+  function bindTeamTableFilters(teams, playersList, memberships) {
+    const applyFilters = () => {
+      const term = (U().qs("#teamSearch")?.value || "").trim().toLowerCase();
+      const status = U().qs("#teamStatusFilter")?.value || "all";
+      const filtered = teams.filter((team) => {
+        const text = `${team.team_name || ""} ${team.team_tag || ""} ${team.status || ""}`.toLowerCase();
+        return (!term || text.includes(term)) && (status === "all" || team.status === status);
+      });
+      U().qs("#teamRows").innerHTML = filtered.map(renderTeamRow).join("") || '<tr><td colspan="4" class="muted">No teams match that search.</td></tr>';
+      bindTeamActions(teams, playersList, memberships);
+    };
+    U().qs("#teamSearch")?.addEventListener("input", applyFilters);
+    U().qs("#teamStatusFilter")?.addEventListener("change", applyFilters);
+  }
+
+  function bindTeamApprovalFilters(requests) {
+    const applyFilters = () => {
+      const term = (U().qs("#teamApprovalSearch")?.value || "").trim().toLowerCase();
+      const status = U().qs("#teamApprovalStatusFilter")?.value || "all";
+      const matches = (request) => {
+        const text = `${request.teams?.team_name || ""} ${request.teams?.team_tag || ""} ${request.team_id || ""} ${request.status || ""}`.toLowerCase();
+        return (!term || text.includes(term)) && (status === "all" || request.status === status);
+      };
+      const filtered = requests.filter(matches);
+      const byStatus = (value) => filtered.filter((request) => request.status === value);
+      U().qs("#pendingTeamRequests").innerHTML = byStatus("pending").map(renderTeamRequest).join("") || '<p class="muted">No pending team approval requests match.</p>';
+      U().qs("#approvedTeamRequests").innerHTML = byStatus("approved").map(renderTeamRequest).join("") || '<p class="muted">No approved team requests match.</p>';
+      U().qs("#rejectedTeamRequests").innerHTML = byStatus("rejected").map(renderTeamRequest).join("") || '<p class="muted">No rejected team requests match.</p>';
+      bindTeamRequests();
+    };
+    U().qs("#teamApprovalSearch")?.addEventListener("input", applyFilters);
+    U().qs("#teamApprovalStatusFilter")?.addEventListener("change", applyFilters);
   }
 
   function renderTeamRequest(request) {
@@ -969,9 +1058,9 @@
     }));
   }
 
-  function bindTeamActions(teams, playersList) {
-    U().qs("#createStaffTeam")?.addEventListener("click", () => openTeamEditor(null, playersList));
-    U().qsa("[data-edit-team]").forEach((button) => button.addEventListener("click", () => openTeamEditor(teams.find((t) => t.team_id === button.dataset.editTeam), playersList)));
+  function bindTeamActions(teams, playersList, memberships) {
+    U().qs("#createStaffTeam")?.addEventListener("click", () => openTeamEditor(null, playersList, memberships, teams));
+    U().qsa("[data-edit-team]").forEach((button) => button.addEventListener("click", () => openTeamEditor(teams.find((t) => t.team_id === button.dataset.editTeam), playersList, memberships, teams)));
     U().qsa("[data-delete-team]").forEach((button) => button.addEventListener("click", async () => {
       if (!confirm("Delete this team?")) return;
       const { error } = await db().rpc("admin_delete_team", { target_team_id: button.dataset.deleteTeam });
@@ -983,15 +1072,23 @@
     }));
   }
 
-  function openTeamEditor(team, playersList) {
+  function openTeamEditor(team, playersList, memberships = [], teams = []) {
     const isNew = !team;
     const roster = team?.roster || [];
+    const occupiedPlayerIds = new Set((memberships || [])
+      .filter((member) => member.team_id !== team?.team_id)
+      .map((member) => member.player_id));
+    (teams || []).filter((item) => item.team_id !== team?.team_id).forEach((item) => {
+      (item.roster || []).forEach((member) => occupiedPlayerIds.add(member.player_id));
+    });
     U().openModal(isNew ? "Create Team" : "Edit Team", `
       <form id="teamEditorForm" class="stack">
         <div class="form-grid">
           <label class="field"><input id="editTeamName" value="${U().escapeHtml(team?.team_name || "")}" required placeholder=" "><span>Team name</span></label>
           <label class="field"><input id="editTeamTag" value="${U().escapeHtml(team?.team_tag || "")}" maxlength="8" required placeholder=" "><span>Tag</span></label>
           <label class="field"><select id="editTeamStatus">${optionList(["recruiting", "pending", "approved", "disbanded"], team?.status || "recruiting")}</select><span>Status</span></label>
+          <label class="field"><select id="editTeamFounder"></select><span>Founder</span></label>
+          <label class="field"><select id="editTeamLeader"></select><span>Team leader</span></label>
         </div>
         <div class="table-wrap">
           <table><thead><tr><th>Player</th><th>Role</th><th></th></tr></thead><tbody id="rosterEditorRows"></tbody></table>
@@ -1009,44 +1106,90 @@
       const p = playersList.find((player) => player.id === id);
       return p ? `${p.full_name} (${p.ign || "no IGN"})` : id;
     };
+    const roleCounts = () => workingRoster.reduce((counts, member) => {
+      counts[member.role] = (counts[member.role] || 0) + 1;
+      return counts;
+    }, {});
+    const missingRoles = () => {
+      const counts = roleCounts();
+      return teamRoles.filter((role) => !counts[role]);
+    };
+    const eligiblePlayers = () => playersList.filter((player) => !occupiedPlayerIds.has(player.id) && !workingRoster.some((member) => member.player_id === player.id));
+    const refreshAddControls = () => {
+      const playerSelect = U().qs("#addRosterPlayer");
+      const roleSelect = U().qs("#addRosterRole");
+      const founderSelect = U().qs("#editTeamFounder");
+      const leaderSelect = U().qs("#editTeamLeader");
+      if (playerSelect) {
+        playerSelect.innerHTML = optionList(eligiblePlayers().map((p) => p.id), "", "Select player");
+        Array.from(playerSelect.options).forEach((option) => {
+          if (option.value) option.textContent = playerName(option.value);
+        });
+      }
+      if (roleSelect) roleSelect.innerHTML = optionList(missingRoles(), missingRoles()[0] || "", missingRoles().length ? undefined : "Roster roles filled");
+      const rosterPlayerIds = workingRoster.map((member) => member.player_id);
+      const fallback = rosterPlayerIds[0] || "";
+      const founderValue = rosterPlayerIds.includes(founderSelect?.value) ? founderSelect.value : team?.founder_id || fallback;
+      const leaderValue = rosterPlayerIds.includes(leaderSelect?.value) ? leaderSelect.value : team?.team_leader_id || fallback;
+      if (founderSelect) {
+        founderSelect.innerHTML = optionList(rosterPlayerIds, founderValue, rosterPlayerIds.length ? undefined : "Add roster first");
+        Array.from(founderSelect.options).forEach((option) => {
+          if (option.value) option.textContent = playerName(option.value);
+        });
+      }
+      if (leaderSelect) {
+        leaderSelect.innerHTML = optionList(rosterPlayerIds, leaderValue, rosterPlayerIds.length ? undefined : "Add roster first");
+        Array.from(leaderSelect.options).forEach((option) => {
+          if (option.value) option.textContent = playerName(option.value);
+        });
+      }
+    };
     const renderRows = () => {
       U().qs("#rosterEditorRows").innerHTML = workingRoster.map((member, index) => `
         <tr>
           <td>${U().escapeHtml(playerName(member.player_id))}</td>
-          <td><select data-roster-role="${index}">${optionList(teamRoles, member.role)}</select></td>
+          <td><select data-roster-role="${index}">${optionList(uniqueValues([member.role, ...missingRoles()]), member.role)}</select></td>
           <td><button class="secondary-button" type="button" data-remove-roster="${index}">Remove</button></td>
         </tr>`).join("") || '<tr><td colspan="3" class="muted">No roster members yet.</td></tr>';
-      U().qsa("[data-roster-role]").forEach((select) => select.addEventListener("change", () => workingRoster[Number(select.dataset.rosterRole)].role = select.value));
+      U().qsa("[data-roster-role]").forEach((select) => select.addEventListener("change", () => {
+        workingRoster[Number(select.dataset.rosterRole)].role = select.value;
+        renderRows();
+      }));
       U().qsa("[data-remove-roster]").forEach((button) => button.addEventListener("click", () => {
         workingRoster.splice(Number(button.dataset.removeRoster), 1);
         renderRows();
       }));
+      refreshAddControls();
     };
-    U().qs("#addRosterPlayer").innerHTML = optionList(playersList.map((p) => p.id), "", "Select player");
-    Array.from(U().qs("#addRosterPlayer").options).forEach((option) => {
-      if (option.value) option.textContent = playerName(option.value);
-    });
     U().qs("#addRosterMember").addEventListener("click", () => {
       const playerId = U().qs("#addRosterPlayer").value;
       const role = U().qs("#addRosterRole").value;
       if (!playerId) return;
+      if (!role) return alert("This team already has every required role.");
+      if (occupiedPlayerIds.has(playerId)) return alert("Player is already active in another team.");
       if (workingRoster.some((member) => member.player_id === playerId)) return alert("Player already on roster.");
       if (workingRoster.length >= 8) return alert("Roster is already full.");
+      if (!missingRoles().includes(role)) return alert("Only missing team roles can be added.");
       workingRoster.push({ player_id: playerId, role, joined_at: new Date().toISOString() });
       renderRows();
     });
     U().qs("#teamEditorForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!workingRoster.length) return U().setMessage("#teamEditorMessage", "Add at least one roster member.", "error");
-      const founder = workingRoster[0].player_id;
+      const rosterIds = workingRoster.map((member) => member.player_id);
+      const founder = U().qs("#editTeamFounder").value || rosterIds[0];
+      const leader = U().qs("#editTeamLeader").value || founder;
+      if (!rosterIds.includes(founder) || !rosterIds.includes(leader)) return U().setMessage("#teamEditorMessage", "Founder and leader must be roster members.", "error");
+      const duplicateRole = teamRoles.find((role) => workingRoster.filter((member) => member.role === role).length > 1);
+      if (duplicateRole) return U().setMessage("#teamEditorMessage", `${duplicateRole.toUpperCase()} is already assigned. Use each team role once.`, "error");
       const coach = workingRoster.find((member) => member.role === "coach")?.player_id || null;
       const payload = {
         team_name: U().qs("#editTeamName").value.trim(),
         team_tag: U().qs("#editTeamTag").value.trim().toUpperCase(),
         status: U().qs("#editTeamStatus").value,
         roster: workingRoster,
-        founder_id: team?.founder_id || founder,
-        team_leader_id: team?.team_leader_id || founder,
+        founder_id: founder,
+        team_leader_id: leader,
         coach_id: coach
       };
       if (isNew && !confirmCreate("team", payload.team_name)) return;
@@ -1056,7 +1199,14 @@
       if (result.error) return U().setMessage("#teamEditorMessage", result.error.message, "error");
       await db().from("team_members").delete().eq("team_id", result.data.team_id);
       await db().from("team_members").insert(workingRoster.map((member) => ({ team_id: result.data.team_id, player_id: member.player_id, role: member.role })));
-      await logAction(isNew ? "create_team" : "update_team", result.data.team_id, { team_name: payload.team_name });
+      const metaRolesByPlayer = { [founder]: ["founder"], [leader]: founder === leader ? ["founder", "leader"] : ["leader"] };
+      await Promise.all(Object.entries(metaRolesByPlayer).filter(([playerId]) => Boolean(playerId)).map(async ([playerId, metaRoles]) => {
+        const profile = playersList.find((player) => player.id === playerId);
+        if (!profile) return;
+        const nextRoles = uniqueValues([...playerRolesFor(profile), ...metaRoles]);
+        await db().from("profiles").update({ player_roles: nextRoles }).eq("id", playerId);
+      }));
+      await logAction(isNew ? "create_team" : "update_team", result.data.team_id, { team_name: payload.team_name, founder_id: founder, team_leader_id: leader, roster: workingRoster });
       U().setMessage("#teamEditorMessage", isNew ? "Team created." : "Team saved.", "success");
       if (isNew) createdPopup("Team", payload.team_name);
       players();
@@ -1065,36 +1215,40 @@
   }
 
   async function broadcasts() {
-    const [postResult, profileResult, tournamentResult] = await Promise.all([
+    const [postResult, profileResult, tournamentResult, teamResult] = await Promise.all([
       db().from("feed_posts").select("*").order("is_pinned", { ascending: false }).order("pin_order", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false }).limit(150),
       db().from("profiles").select("id, full_name, username, ign, role, staff_role, staff_roles, player_roles").order("full_name").limit(500),
-      db().from("tournaments").select("tournament_id, name").order("created_at", { ascending: false }).limit(200)
+      db().from("tournaments").select("tournament_id, name").order("created_at", { ascending: false }).limit(200),
+      db().from("teams").select("team_id, team_name, team_tag").eq("status", "approved").order("team_name").limit(300)
     ]);
     if (postResult.error) return U().qs("#dashContent").innerHTML = `<p class="message error">${U().escapeHtml(postResult.error.message)}</p>`;
     const profiles = profileResult.data || [];
     const tournamentsList = tournamentResult.data || [];
+    const teamsList = teamResult.data || [];
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
     const tournamentMap = new Map(tournamentsList.map((tournament) => [tournament.tournament_id, tournament]));
     const posts = postResult.data || [];
     const pinnedCount = posts.filter((post) => post.is_pinned).length;
     U().qs("#dashContent").innerHTML = `
-      ${canBroadcast() ? renderBroadcastComposer(tournamentsList, profiles, pinnedCount) : ""}
+      ${canBroadcast() ? renderBroadcastComposer(tournamentsList, profiles, teamsList, pinnedCount) : ""}
       <section class="wide-panel">
         <div class="section-heading"><h2>Broadcast History</h2><span class="pill">${pinnedCount} / 5 pinned</span></div>
-        <div class="table-wrap">${renderBroadcastTable(posts, profileMap, tournamentMap)}</div>
+        <div class="table-wrap">${renderBroadcastTable(posts, profileMap, tournamentMap, teamsList)}</div>
       </section>`;
-    bindBroadcastComposer(tournamentsList, profiles);
-    bindBroadcastActions(posts, tournamentsList, profiles);
+    bindBroadcastComposer(tournamentsList, profiles, teamsList);
+    bindBroadcastActions(posts, tournamentsList, profiles, teamsList);
+    bindBroadcastHistoryFilters(posts, profileMap, tournamentMap, teamsList, tournamentsList, profiles);
   }
 
-  function renderBroadcastComposer(tournamentsList, profiles, pinnedCount) {
+  function renderBroadcastComposer(tournamentsList, profiles, teamsList, pinnedCount) {
     return `<section class="wide-panel">
       <div class="section-heading"><h2>Create Broadcast</h2><span class="pill good">${U().escapeHtml(staffRoleLabel())}</span></div>
       <form id="broadcastForm" class="form-grid">
         <label class="field"><input id="broadcastTitle" required placeholder=" "><span>Title</span></label>
         <label class="field"><select id="broadcastAudience">${optionList(audienceTypes, "all")}</select><span>Audience</span></label>
-        <label class="field"><select id="broadcastTargetRole">${optionList([...userRoles, ...protectedStaffRoles], "", "Only for role audience")}</select><span>Target role</span></label>
+        <label class="field"><select id="broadcastTargetRole">${optionList([...userRoles, ...protectedStaffRoles, ...playerRoles], "", "Only for role audience")}</select><span>Target role</span></label>
         <label class="field"><select id="broadcastTargetUser">${optionList(profiles.map((profile) => profile.id), "", "Only for individual audience")}</select><span>Target user</span></label>
+        <label class="field"><select id="broadcastTargetTeam">${optionList(teamsList.map((team) => team.team_id), "", "Only for team audience")}</select><span>Target team</span></label>
         <label class="field"><select id="broadcastTournament">${optionList(tournamentsList.map((t) => t.tournament_id), "", "No tournament link")}</select><span>Tournament link</span></label>
         <label class="field"><select id="broadcastPinOrder">${optionList([1, 2, 3, 4, 5], 1)}</select><span>Pin order</span></label>
         <label class="field"><textarea id="broadcastContent" required placeholder=" "></textarea><span>Content</span></label>
@@ -1105,34 +1259,79 @@
     </section>`;
   }
 
-  function renderBroadcastTable(posts, profileMap, tournamentMap) {
+  function renderBroadcastTable(posts, profileMap, tournamentMap, teamsList = []) {
+    const teamMap = new Map(teamsList.map((team) => [team.team_id, team]));
+    const rows = (items) => items.map((post) => {
+      const author = profileMap.get(post.author_id);
+      const target = profileMap.get(post.target_user_id);
+      const tournament = tournamentMap.get(post.tournament_id);
+      const targetTeam = teamMap.get(post.target_team_id);
+      const audience = post.audience_type === "individual"
+        ? `individual: ${target?.full_name || post.target_user_id || "unknown"}`
+        : post.audience_type === "role"
+          ? `role: ${post.target_role || "unknown"}`
+          : post.audience_type === "team"
+            ? `team: ${targetTeam ? `${targetTeam.team_name} [${targetTeam.team_tag}]` : post.target_team_id || "unknown"}`
+          : post.audience_type;
+      return `<tr>
+        <td><strong>${U().escapeHtml(post.title)}</strong><br><span class="muted">${U().escapeHtml(author?.full_name || "Unknown")} - ${U().escapeHtml(post.author_role || "")}${tournament ? ` - ${U().escapeHtml(tournament.name)}` : ""}</span></td>
+        <td>${U().escapeHtml(audience)}</td>
+        <td>${post.is_pinned ? `<span class="pill warn">#${post.pin_order || "-"}</span>` : '<span class="muted">No</span>'}</td>
+        <td>${U().escapeHtml(relativeTime(post.created_at))}<br><span class="muted">${new Date(post.created_at).toLocaleString()}</span></td>
+        <td>${post.updated_at ? `${U().escapeHtml(relativeTime(post.updated_at))}<br><span class="muted">${new Date(post.updated_at).toLocaleString()}</span>` : '<span class="muted">Never</span>'}</td>
+        <td><div class="toolbar">
+          ${canEditBroadcast(post) ? `<button class="secondary-button" type="button" data-edit-broadcast="${post.post_id}">Edit</button>` : ""}
+          ${canDeleteBroadcast(post) ? `<button class="secondary-button" type="button" data-delete-broadcast="${post.post_id}">Delete</button>` : ""}
+        </div></td>
+      </tr>`;
+    }).join("") || '<tr><td colspan="6" class="muted">No broadcasts match that search.</td></tr>';
     return `<table>
+      <caption class="table-caption">
+        <div class="filter-grid dashboard-filter-bar">
+          <label class="field"><input id="broadcastHistorySearch" type="search" placeholder=" "><span>Search broadcasts</span></label>
+          <label class="field"><select id="broadcastHistoryAudience"><option value="all">All audiences</option>${audienceTypes.map((type) => `<option value="${type}">${type}</option>`).join("")}</select><span>Audience</span></label>
+          <label class="field"><select id="broadcastHistoryPin"><option value="all">Pinned and unpinned</option><option value="pinned">Pinned only</option><option value="unpinned">Unpinned only</option></select><span>Pin state</span></label>
+        </div>
+      </caption>
       <thead><tr><th>Broadcast</th><th>Audience</th><th>Pin</th><th>Posted</th><th>Updated</th><th>Actions</th></tr></thead>
-      <tbody>${posts.map((post) => {
-        const author = profileMap.get(post.author_id);
-        const target = profileMap.get(post.target_user_id);
-        const tournament = tournamentMap.get(post.tournament_id);
-        const audience = post.audience_type === "individual"
-          ? `individual: ${target?.full_name || post.target_user_id || "unknown"}`
-          : post.audience_type === "role"
-            ? `role: ${post.target_role || "unknown"}`
-            : post.audience_type;
-        return `<tr>
-          <td><strong>${U().escapeHtml(post.title)}</strong><br><span class="muted">${U().escapeHtml(author?.full_name || "Unknown")} - ${U().escapeHtml(post.author_role || "")}${tournament ? ` - ${U().escapeHtml(tournament.name)}` : ""}</span></td>
-          <td>${U().escapeHtml(audience)}</td>
-          <td>${post.is_pinned ? `<span class="pill warn">#${post.pin_order || "-"}</span>` : '<span class="muted">No</span>'}</td>
-          <td>${U().escapeHtml(relativeTime(post.created_at))}<br><span class="muted">${new Date(post.created_at).toLocaleString()}</span></td>
-          <td>${post.updated_at ? `${U().escapeHtml(relativeTime(post.updated_at))}<br><span class="muted">${new Date(post.updated_at).toLocaleString()}</span>` : '<span class="muted">Never</span>'}</td>
-          <td><div class="toolbar">
-            ${canEditBroadcast(post) ? `<button class="secondary-button" type="button" data-edit-broadcast="${post.post_id}">Edit</button>` : ""}
-            ${canDeleteBroadcast(post) ? `<button class="secondary-button" type="button" data-delete-broadcast="${post.post_id}">Delete</button>` : ""}
-          </div></td>
-        </tr>`;
-      }).join("") || '<tr><td colspan="6" class="muted">No broadcasts yet.</td></tr>'}</tbody>
+      <tbody id="broadcastHistoryRows">${rows(posts)}</tbody>
     </table>`;
   }
 
-  function labelBroadcastSelects(tournamentsList, profiles) {
+  function renderBroadcastHistoryRows(posts, profileMap, tournamentMap, teamsList) {
+    const tempTable = document.createElement("div");
+    tempTable.innerHTML = renderBroadcastTable(posts, profileMap, tournamentMap, teamsList);
+    return tempTable.querySelector("tbody")?.innerHTML || "";
+  }
+
+  function bindBroadcastHistoryFilters(posts, profileMap, tournamentMap, teamsList, tournamentsList, profiles) {
+    const teamMap = new Map(teamsList.map((team) => [team.team_id, team]));
+    const textFor = (post) => {
+      const author = profileMap.get(post.author_id);
+      const target = profileMap.get(post.target_user_id);
+      const tournament = tournamentMap.get(post.tournament_id);
+      const team = teamMap.get(post.target_team_id);
+      return [post.title, post.content, post.author_role, post.audience_type, post.target_role, author?.full_name, author?.username, target?.full_name, tournament?.name, team?.team_name, team?.team_tag].filter(Boolean).join(" ").toLowerCase();
+    };
+    const applyFilters = () => {
+      const term = (U().qs("#broadcastHistorySearch")?.value || "").trim().toLowerCase();
+      const audience = U().qs("#broadcastHistoryAudience")?.value || "all";
+      const pin = U().qs("#broadcastHistoryPin")?.value || "all";
+      const filtered = posts.filter((post) => {
+        const matchesTerm = !term || textFor(post).includes(term);
+        const matchesAudience = audience === "all" || post.audience_type === audience;
+        const matchesPin = pin === "all" || (pin === "pinned" ? post.is_pinned : !post.is_pinned);
+        return matchesTerm && matchesAudience && matchesPin;
+      });
+      U().qs("#broadcastHistoryRows").innerHTML = renderBroadcastHistoryRows(filtered, profileMap, tournamentMap, teamsList);
+      bindBroadcastActions(posts, tournamentsList, profiles, teamsList);
+    };
+    U().qs("#broadcastHistorySearch")?.addEventListener("input", applyFilters);
+    U().qs("#broadcastHistoryAudience")?.addEventListener("change", applyFilters);
+    U().qs("#broadcastHistoryPin")?.addEventListener("change", applyFilters);
+  }
+
+  function labelBroadcastSelects(tournamentsList, profiles, teamsList = []) {
     const labelOptions = (selector, items, idKey, labeler) => {
       const select = U().qs(selector);
       if (!select) return;
@@ -1143,6 +1342,10 @@
     };
     labelOptions("#broadcastTournament", tournamentsList, "tournament_id", (item) => item.name);
     labelOptions("#broadcastTargetUser", profiles, "id", (item) => `${item.full_name} (@${item.username || "username"})`);
+    labelOptions("#broadcastTargetTeam", teamsList, "team_id", (item) => `${item.team_name} [${item.team_tag}]`);
+    labelOptions("#editBroadcastTournament", tournamentsList, "tournament_id", (item) => item.name);
+    labelOptions("#editBroadcastTargetUser", profiles, "id", (item) => `${item.full_name} (@${item.username || "username"})`);
+    labelOptions("#editBroadcastTargetTeam", teamsList, "team_id", (item) => `${item.team_name} [${item.team_tag}]`);
   }
 
   async function freePinSlot(pinOrder, postId) {
@@ -1169,6 +1372,7 @@
       audience_type: audience,
       target_role: audience === "role" ? U().qs(`#${prefix}TargetRole`).value || null : null,
       target_user_id: audience === "individual" ? U().qs(`#${prefix}TargetUser`).value || null : null,
+      target_team_id: audience === "team" ? U().qs(`#${prefix}TargetTeam`).value || null : null,
       is_pinned: isPinned,
       pin_order: isPinned ? Number(U().qs(`#${prefix}PinOrder`).value) : null
     };
@@ -1177,11 +1381,12 @@
   function validateBroadcastPayload(payload) {
     if (payload.audience_type === "role" && !payload.target_role) throw new Error("Choose a target role.");
     if (payload.audience_type === "individual" && !payload.target_user_id) throw new Error("Choose a target user.");
+    if (payload.audience_type === "team" && !payload.target_team_id) throw new Error("Choose an approved team.");
     if (payload.is_pinned && (!payload.pin_order || payload.pin_order < 1 || payload.pin_order > 5)) throw new Error("Pinned broadcasts must use pin order 1 to 5.");
   }
 
-  function bindBroadcastComposer(tournamentsList, profiles) {
-    labelBroadcastSelects(tournamentsList, profiles);
+  function bindBroadcastComposer(tournamentsList, profiles, teamsList) {
+    labelBroadcastSelects(tournamentsList, profiles, teamsList);
     U().qs("#broadcastForm")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
@@ -1207,8 +1412,8 @@
     });
   }
 
-  function bindBroadcastActions(posts, tournamentsList, profiles) {
-    U().qsa("[data-edit-broadcast]").forEach((button) => button.addEventListener("click", () => openBroadcastEditor(posts.find((post) => post.post_id === button.dataset.editBroadcast), tournamentsList, profiles)));
+  function bindBroadcastActions(posts, tournamentsList, profiles, teamsList) {
+    U().qsa("[data-edit-broadcast]").forEach((button) => button.addEventListener("click", () => openBroadcastEditor(posts.find((post) => post.post_id === button.dataset.editBroadcast), tournamentsList, profiles, teamsList)));
     U().qsa("[data-delete-broadcast]").forEach((button) => button.addEventListener("click", async () => {
       if (!confirm("Delete this broadcast?")) return;
       const { error } = await db().from("feed_posts").delete().eq("post_id", button.dataset.deleteBroadcast);
@@ -1220,14 +1425,15 @@
     }));
   }
 
-  function openBroadcastEditor(post, tournamentsList, profiles) {
+  function openBroadcastEditor(post, tournamentsList, profiles, teamsList = []) {
     if (!post) return;
     U().openModal("Edit Broadcast", `
       <form id="editBroadcastForm" class="form-grid">
         <label class="field"><input id="editBroadcastTitle" value="${U().escapeHtml(post.title)}" required placeholder=" "><span>Title</span></label>
         <label class="field"><select id="editBroadcastAudience">${optionList(audienceTypes, post.audience_type || "all")}</select><span>Audience</span></label>
-        <label class="field"><select id="editBroadcastTargetRole">${optionList([...userRoles, ...protectedStaffRoles], post.target_role || "", "Only for role audience")}</select><span>Target role</span></label>
+        <label class="field"><select id="editBroadcastTargetRole">${optionList([...userRoles, ...protectedStaffRoles, ...playerRoles], post.target_role || "", "Only for role audience")}</select><span>Target role</span></label>
         <label class="field"><select id="editBroadcastTargetUser">${optionList(profiles.map((profile) => profile.id), post.target_user_id || "", "Only for individual audience")}</select><span>Target user</span></label>
+        <label class="field"><select id="editBroadcastTargetTeam">${optionList(teamsList.map((team) => team.team_id), post.target_team_id || "", "Only for team audience")}</select><span>Target team</span></label>
         <label class="field"><select id="editBroadcastTournament">${optionList(tournamentsList.map((t) => t.tournament_id), post.tournament_id || "", "No tournament link")}</select><span>Tournament link</span></label>
         <label class="field"><select id="editBroadcastPinOrder">${optionList([1, 2, 3, 4, 5], post.pin_order || 1)}</select><span>Pin order</span></label>
         <label class="field"><textarea id="editBroadcastContent" required placeholder=" ">${U().escapeHtml(post.content)}</textarea><span>Content</span></label>
@@ -1235,7 +1441,7 @@
         <button class="primary-button" type="submit">Save broadcast</button>
         <p id="editBroadcastMessage" class="message"></p>
       </form>`);
-    labelBroadcastSelects(tournamentsList, profiles);
+    labelBroadcastSelects(tournamentsList, profiles, teamsList);
     const userSelect = U().qs("#editBroadcastTargetUser");
     if (userSelect) {
       Array.from(userSelect.options).forEach((option) => {
@@ -1281,11 +1487,19 @@
     U().qs("#dashContent").innerHTML = `
       ${canCreateTournaments() ? renderCreateTournamentPanel() : ""}
       <section class="wide-panel"><h2>Tournaments</h2><div class="table-wrap">${renderTournamentTable(tournamentList, registrationStats)}</div></section>
-      <section class="wide-panel"><h2>Registrations</h2><div class="list-stack">${(registrationResult.data || []).map(renderRegistration).join("") || '<p class="muted">No registrations yet.</p>'}</div></section>
+      <section class="wide-panel">
+        <div class="section-heading"><h2>Registrations</h2><span class="pill">${(registrationResult.data || []).length} tickets</span></div>
+        <div class="filter-grid dashboard-filter-bar">
+          <label class="field"><input id="registrationSearch" type="search" placeholder=" "><span>Search teams or tournaments</span></label>
+          <label class="field"><select id="registrationStatusFilter"><option value="all">All registrations</option><option value="pending">Pending only</option><option value="approved">Approved only</option><option value="rejected">Rejected only</option></select><span>Status</span></label>
+        </div>
+        <div id="registrationList" class="list-stack">${renderRegistrationList(registrationResult.data || [])}</div>
+      </section>
       <section class="wide-panel"><h2>Tie Sheet</h2><div class="table-wrap">${renderMatchTable(matchResult.data || [])}</div></section>`;
     bindTournamentForms();
     bindTournamentActions(tournamentList);
     bindRegistrationActions();
+    bindRegistrationFilters(registrationResult.data || []);
     bindMatchActions(matchResult.data || [], tournamentList, teamsList);
   }
 
@@ -1342,6 +1556,33 @@
           <button class="secondary-button" type="button" data-reject-registration="${registration.registration_id}">Reject</button>
         </div>` : ""}
     </div>`;
+  }
+
+  function renderRegistrationList(registrations) {
+    const pending = registrations.filter((registration) => registration.status === "pending");
+    const approved = registrations.filter((registration) => registration.status === "approved");
+    const rejected = registrations.filter((registration) => registration.status === "rejected");
+    return `
+      <div class="status-lane-grid">
+        <section class="status-lane"><div class="section-heading"><strong>Pending</strong><span class="pill warn">${pending.length}</span></div>${pending.map(renderRegistration).join("") || '<p class="muted">No pending registrations.</p>'}</section>
+        <section class="status-lane"><div class="section-heading"><strong>Approved</strong><span class="pill good">${approved.length}</span></div>${approved.map(renderRegistration).join("") || '<p class="muted">No approved registrations.</p>'}</section>
+        <section class="status-lane"><div class="section-heading"><strong>Rejected</strong><span class="pill bad">${rejected.length}</span></div>${rejected.map(renderRegistration).join("") || '<p class="muted">No rejected registrations.</p>'}</section>
+      </div>`;
+  }
+
+  function bindRegistrationFilters(registrations) {
+    const applyFilters = () => {
+      const term = (U().qs("#registrationSearch")?.value || "").trim().toLowerCase();
+      const status = U().qs("#registrationStatusFilter")?.value || "all";
+      const filtered = registrations.filter((registration) => {
+        const text = `${registration.teams?.team_name || ""} ${registration.teams?.team_tag || ""} ${registration.tournaments?.name || ""} ${registration.status || ""}`.toLowerCase();
+        return (!term || text.includes(term)) && (status === "all" || registration.status === status);
+      });
+      U().qs("#registrationList").innerHTML = renderRegistrationList(filtered);
+      bindRegistrationActions();
+    };
+    U().qs("#registrationSearch")?.addEventListener("input", applyFilters);
+    U().qs("#registrationStatusFilter")?.addEventListener("change", applyFilters);
   }
 
   function renderMatchTable(matches) {
@@ -1463,10 +1704,10 @@
       lower_final_break_days: 3
     };
     const plans = {
-      128: { ...common, phases: ["round_128", "round_64", "group_stage_32_to_16", "double_elim_16", "grand_final"] },
-      64: { ...common, phases: ["round_64", "group_stage_32_to_16", "double_elim_16", "grand_final"] },
-      32: { ...common, phases: ["round_32", "double_elim_16", "grand_final"] },
-      16: { ...common, phases: ["group_stage_16_to_8", "double_elim_8", "grand_final"] },
+      128: { ...common, phases: ["round_128", "round_64", "group_stage_32_to_8", "double_elim_8", "grand_final"] },
+      64: { ...common, phases: ["round_64", "group_stage_32_to_8", "double_elim_8", "grand_final"] },
+      32: { ...common, phases: ["group_stage_32_to_8", "double_elim_8", "grand_final"] },
+      16: { ...common, phases: ["round_16_to_8", "double_elim_8", "grand_final"] },
       8: { ...common, phases: ["double_elim_8", "grand_final"] },
       4: { ...common, phases: ["double_elim_4", "grand_final"] }
     };
@@ -1476,8 +1717,8 @@
   function firstPlayablePhase(capacity) {
     if (capacity === 128) return "round_128";
     if (capacity === 64) return "round_64";
-    if (capacity === 32) return "round_32";
-    if (capacity === 16) return "group_stage";
+    if (capacity === 32) return "group_stage";
+    if (capacity === 16) return "round_16";
     return "playoff_upper_r1";
   }
 
@@ -1588,19 +1829,17 @@
       addScheduledRows(rows, tournament, cursor, { count: 32, maxPerDay: 6, roundName: "Round of 64 - BO1", roundNumber: roundNumber++, phase: "round_64", bestOf: 1, positionOffset, graceDays: 1 });
       positionOffset += 32;
     }
-    if (capacity === 32) {
-      addScheduledRows(rows, tournament, cursor, { count: 16, maxPerDay: 6, roundName: "Round of 32 - BO1", roundNumber: roundNumber++, phase: "round_32", bestOf: 1, positionOffset, graceDays: 1 });
-      positionOffset += 16;
-    }
     if (capacity === 128 || capacity === 64) {
       addGroupStageRows(rows, tournament, cursor, roundNumber++, groupNamesForCapacity(32), positionOffset);
       positionOffset += 48;
-      addPlayoffRows(rows, tournament, cursor, 16, roundNumber, positionOffset);
+      addPlayoffRows(rows, tournament, cursor, 8, roundNumber, positionOffset);
     } else if (capacity === 32) {
-      addPlayoffRows(rows, tournament, cursor, 16, roundNumber, positionOffset);
+      addGroupStageRows(rows, tournament, cursor, roundNumber++, groupNamesForCapacity(32), positionOffset);
+      positionOffset += 48;
+      addPlayoffRows(rows, tournament, cursor, 8, roundNumber, positionOffset);
     } else if (capacity === 16) {
-      addGroupStageRows(rows, tournament, cursor, roundNumber++, groupNamesForCapacity(16), positionOffset);
-      positionOffset += 24;
+      addScheduledRows(rows, tournament, cursor, { count: 8, maxPerDay: 6, roundName: "Round of 16 - BO1", roundNumber: roundNumber++, phase: "round_16", bestOf: 1, positionOffset, graceDays: 1 });
+      positionOffset += 8;
       addPlayoffRows(rows, tournament, cursor, 8, roundNumber, positionOffset);
     } else if (capacity === 8) {
       addPlayoffRows(rows, tournament, cursor, 8, roundNumber, positionOffset);
@@ -1837,8 +2076,8 @@
       if (!isSuperAdmin && hasRealStaffRole(actor, "superadmin")) return false;
       const department = actionDepartment(log.action);
       if (!isSuperAdmin) {
-        if (currentRole.includes("useradmin") || currentRole.includes("usermod")) return department === "User";
-        if (currentRole.includes("playeradmin") || currentRole.includes("playermod")) return department === "Player";
+        if (currentRole.includes("useradmin") || currentRole.includes("usermod")) return department === "User Management";
+        if (currentRole.includes("playeradmin") || currentRole.includes("playermod")) return department === "Player Management";
         if (currentRole.includes("tournamentadmin") || currentRole.includes("tournamentmod")) return department === "Tournament";
       }
       return true;
@@ -1924,9 +2163,166 @@
     renderRows(baseLogs);
   }
 
+  async function audit() {
+    const root = U().qs("#dashContent");
+    root.innerHTML = '<p class="muted">Loading audit activity...</p>';
+
+    const [{ data, error }, { data: profiles }] = await Promise.all([
+      db().from("audit_logs").select("*, profiles!admin_id(id, full_name, username, role, staff_role, staff_roles)").order("created_at", { ascending: false }).limit(250),
+      db().from("profiles").select("id, full_name, username, role, staff_role, staff_roles").limit(500)
+    ]);
+    if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
+
+    const actorMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
+    const currentRole = staffRolesFor(me());
+    const isSuperAdmin = currentRole.includes("superadmin");
+    const visibleLogs = (data || []).filter((log) => {
+      const actor = actorMap[log.admin_id] || {};
+      if (!isSuperAdmin && hasRealStaffRole(actor, "superadmin")) return false;
+      const department = actionDepartment(log.action);
+      if (!isSuperAdmin) {
+        if (currentRole.includes("useradmin") || currentRole.includes("usermod")) return department === "User Management";
+        if (currentRole.includes("playeradmin") || currentRole.includes("playermod")) return department === "Player Management";
+        if (currentRole.includes("tournamentadmin") || currentRole.includes("tournamentmod")) return department === "Tournament";
+      }
+      return true;
+    });
+
+    const departments = ["User Management", "Player Management", "Tournament", "Broadcast", "General"];
+    const actorName = (log) => actorMap[log.admin_id]?.full_name || actorMap[log.admin_id]?.username || "Unknown";
+    const staffLabel = (actor) => [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean).join(", ") || actor.role || "user";
+    const logText = (log) => `${actionLabel(log.action)} ${actionDepartment(log.action)} ${actorName(log)} ${log.target_id || ""} ${JSON.stringify(log.details || {})}`.toLowerCase();
+
+    function openAuditDetail(log) {
+      if (!log) return;
+      const actor = actorMap[log.admin_id] || {};
+      U().openModal("Audit Details", `
+        <section class="detail-grid">
+          <div class="mini-card">
+            <div class="section-heading"><strong>${U().escapeHtml(actionLabel(log.action))}</strong><span class="pill">${U().escapeHtml(actionDepartment(log.action))}</span></div>
+            <dl class="detail-list">
+              <div><dt>Actor</dt><dd>${U().escapeHtml(actorName(log))}</dd></div>
+              <div><dt>Actor role</dt><dd>${U().escapeHtml(staffLabel(actor))}</dd></div>
+              <div><dt>Target</dt><dd>${U().escapeHtml(log.target_id || "-")}</dd></div>
+              <div><dt>Date</dt><dd>${U().formatDate(log.created_at)}</dd></div>
+            </dl>
+          </div>
+          <pre class="code-block">${U().escapeHtml(JSON.stringify(log.details || {}, null, 2))}</pre>
+        </section>`);
+    }
+
+    function bindAuditDetailButtons() {
+      U().qsa("[data-audit-detail]").forEach((button) => button.addEventListener("click", () => {
+        openAuditDetail(visibleLogs.find((log) => String(log.log_id) === String(button.dataset.auditDetail)));
+      }));
+    }
+
+    function renderAuditTable(logs) {
+      return logs.map((log) => {
+        const actor = actorMap[log.admin_id] || {};
+        return `<tr>
+          <td>${U().escapeHtml(actorName(log))}<br><span class="muted">${U().escapeHtml(staffLabel(actor))}</span></td>
+          <td>${U().escapeHtml(actionDepartment(log.action))}</td>
+          <td>${U().escapeHtml(actionLabel(log.action))}</td>
+          <td>${U().escapeHtml(log.target_id || "-")}</td>
+          <td><button class="secondary-button compact-button" type="button" data-audit-detail="${log.log_id}">Open</button></td>
+          <td>${U().formatDate(log.created_at)}</td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="6"><p class="muted">No audit entries match the current filters.</p></td></tr>';
+    }
+
+    function renderAuditGroups(logs) {
+      return departments.map((department) => {
+        const entries = logs.filter((log) => actionDepartment(log.action) === department);
+        return `<article class="audit-group-card">
+          <div class="section-heading"><strong>${U().escapeHtml(department)}</strong><span class="pill">${entries.length}</span></div>
+          <div class="list-stack">${entries.slice(0, 4).map((log) => `<button class="audit-mini-row" type="button" data-audit-detail="${log.log_id}">
+            <span>${U().escapeHtml(actionLabel(log.action))}</span>
+            <small>${U().escapeHtml(actorName(log))} - ${U().formatDate(log.created_at)}</small>
+          </button>`).join("") || '<p class="muted">No matching activity.</p>'}</div>
+        </article>`;
+      }).join("");
+    }
+
+    function render(logs, state = {}) {
+      const counts = logs.reduce((memo, log) => {
+        const department = actionDepartment(log.action);
+        memo[department] = (memo[department] || 0) + 1;
+        return memo;
+      }, {});
+      const actors = [...new Set(logs.map(actorName))].slice(0, 8);
+      root.innerHTML = `
+        <section class="card-grid audit-stat-grid">
+          <article class="item-card"><strong>${logs.length}</strong><span>Filtered entries</span></article>
+          <article class="item-card"><strong>${counts["User Management"] || 0}</strong><span>User management</span></article>
+          <article class="item-card"><strong>${counts["Player Management"] || 0}</strong><span>Player management</span></article>
+          <article class="item-card"><strong>${actors.length}</strong><span>Active actors</span></article>
+        </section>
+        <section class="wide-panel audit-filter-panel">
+          <div class="section-heading"><h2>Audit Filters</h2><span class="pill good">${isSuperAdmin ? "Superadmin view" : "Scoped view"}</span></div>
+          <div class="filter-grid audit-filter-grid">
+            <label class="field"><input id="auditSearch" type="search" value="${U().escapeHtml(state.query || "")}" placeholder=" "><span>Search action, actor, target, or details</span></label>
+            <label class="field"><select id="auditDepartmentFilter"><option value="all">All departments</option>${departments.map((department) => `<option value="${department}" ${state.department === department ? "selected" : ""}>${department}</option>`).join("")}</select><span>Department</span></label>
+            <label class="field"><select id="auditActorFilter"><option value="all">All actors</option>${[...new Set(visibleLogs.map(actorName))].map((name) => `<option value="${U().escapeHtml(name)}" ${state.actor === name ? "selected" : ""}>${U().escapeHtml(name)}</option>`).join("")}</select><span>Actor</span></label>
+            <button id="applyAuditFilters" class="primary-button" type="button"><i class="fa-solid fa-filter"></i> Apply</button>
+            <button id="resetAuditFilters" class="secondary-button" type="button">Reset</button>
+          </div>
+          <div class="pill-row" style="margin-top:10px;"><span class="pill">Filtered from ${visibleLogs.length}</span><span class="pill">Superadmin activity: ${isSuperAdmin ? "Visible" : "Hidden"}</span></div>
+        </section>
+        <section class="wide-panel">
+          <div class="section-heading"><h2>Grouped Audit</h2><span class="pill warn">Open any item for details</span></div>
+          <div class="audit-group-grid">${renderAuditGroups(logs)}</div>
+        </section>
+        <section class="table-wrap"><table><thead><tr><th>Actor</th><th>Department</th><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody>${renderAuditTable(logs)}</tbody></table></section>`;
+
+      const applyFilters = () => {
+        const query = (U().qs("#auditSearch")?.value || "").trim().toLowerCase();
+        const department = U().qs("#auditDepartmentFilter")?.value || "all";
+        const actor = U().qs("#auditActorFilter")?.value || "all";
+        const filtered = visibleLogs.filter((log) => {
+          return (!query || logText(log).includes(query))
+            && (department === "all" || actionDepartment(log.action) === department)
+            && (actor === "all" || actorName(log) === actor);
+        });
+        render(filtered, { query, department, actor });
+      };
+      U().qs("#applyAuditFilters")?.addEventListener("click", applyFilters);
+      U().qs("#resetAuditFilters")?.addEventListener("click", () => render(visibleLogs, {}));
+      U().qs("#auditSearch")?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") applyFilters();
+      });
+      bindAuditDetailButtons();
+    }
+
+    render(visibleLogs);
+  }
+
   async function activity() {
     const { data } = await db().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(8);
-    U().qs("#activityPanel").innerHTML = `<h2>Activity</h2><div class="list-stack">${(data || []).map((a) => `<div><strong>${U().escapeHtml(a.action)}</strong><p class="muted">${U().formatDate(a.created_at)}</p></div>`).join("") || '<p class="muted">No activity yet.</p>'}</div>`;
+    const logs = data || [];
+    const counts = logs.reduce((memo, log) => {
+      const department = actionDepartment(log.action);
+      memo[department] = (memo[department] || 0) + 1;
+      return memo;
+    }, {});
+    U().qs("#activityPanel").innerHTML = `
+      <div class="activity-header">
+        <p class="eyebrow">Live Desk</p>
+        <h2>Activity Pulse</h2>
+      </div>
+      <div class="activity-metrics">
+        <span><strong>${logs.length}</strong><small>latest</small></span>
+        <span><strong>${counts["Player Management"] || 0}</strong><small>player</small></span>
+        <span><strong>${counts.Tournament || 0}</strong><small>event</small></span>
+      </div>
+      <div class="activity-timeline">${logs.map((log) => `
+        <article class="activity-item">
+          <span class="activity-dot"></span>
+          <strong>${U().escapeHtml(actionLabel(log.action))}</strong>
+          <p>${U().escapeHtml(actionDepartment(log.action))}</p>
+          <small>${U().formatDate(log.created_at)}</small>
+        </article>
+      `).join("") || '<p class="muted">No activity yet.</p>'}</div>`;
   }
 
   function updatePreviewBadge() {

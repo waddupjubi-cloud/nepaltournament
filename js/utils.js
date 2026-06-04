@@ -1,5 +1,18 @@
 (function () {
-  const roles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole"];
+  const roles = ["exp", "jg", "gd", "md", "rm", "coach", "sb1", "sb2", "multirole", "founder", "leader"];
+  const roleLabels = {
+    exp: "EXP lane menace",
+    jg: "Jungle tax collector",
+    gd: "Gold lane main character",
+    md: "Mid lane yap controller",
+    rm: "Roam GPS online",
+    coach: "Coach with the notes app",
+    sb1: "Sub slot clutch",
+    sb2: "Bench aura loaded",
+    multirole: "COOL GUY multirole diff",
+    founder: "Founder energy",
+    leader: "Team lead, no panic"
+  };
 
   function qs(selector, root) {
     return (root || document).querySelector(selector);
@@ -112,7 +125,7 @@
   function rolePills(values) {
     const list = Array.isArray(values) ? values : String(values || "").split(",").filter(Boolean);
     if (!list.length) return "";
-    return `<div class="pill-row">${list.map((role) => `<span class="pill">${escapeHtml(role)}</span>`).join("")}</div>`;
+    return `<div class="pill-row">${list.map((role) => `<span class="pill role-tag role-${escapeHtml(role)}">${escapeHtml(roleLabels[role] || role)}</span>`).join("")}</div>`;
   }
 
   function drawMatrix(canvas) {

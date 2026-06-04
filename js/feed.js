@@ -4,17 +4,27 @@
     const root = U.qs("#feedPosts");
     if (!root || !window.currentProfile) return;
     root.innerHTML = U.spinner();
-    const { data, error } = await window.tpSupabase
+    const [{ data, error }, { data: teams }] = await Promise.all([
+      window.tpSupabase
       .from("feed_posts")
       .select("*, tournaments(tournament_id,name,status,start_date)")
       .order("is_pinned", { ascending: false })
       .order("pin_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(50),
+      window.tpSupabase.from("teams").select("team_id, team_name, team_tag").eq("status", "approved")
+    ]);
     if (error) {
       root.innerHTML = `<p class="message error">${U.escapeHtml(error.message)}</p>`;
       return;
     }
+    const teamMap = new Map((teams || []).map((team) => [team.team_id, team]));
+    const audienceLabel = (post) => {
+      const team = teamMap.get(post.target_team_id);
+      return post.audience_type === "team" && team
+        ? `team - ${team.team_name} [${team.team_tag}]`
+        : post.audience_type || "all";
+    };
     root.innerHTML = (data || []).map((post) => `
       <article class="post-card">
         <div class="section-heading">
@@ -25,7 +35,7 @@
           ${post.is_pinned ? `<span class="pill warn">Pinned #${post.pin_order || 1}</span>` : ""}
         </div>
         <p>${U.escapeHtml(post.content)}</p>
-        <p class="muted">${U.escapeHtml(post.audience_type || "all")} - ${new Date(post.created_at).toLocaleString()}</p>
+        <p class="muted">${U.escapeHtml(audienceLabel(post))} - ${new Date(post.created_at).toLocaleString()}</p>
         ${post.media_url ? `<img src="${U.escapeHtml(post.media_url)}" alt="" style="width:100%;border-radius:8px">` : ""}
         ${post.tournament_id ? `<button class="secondary-button" type="button" data-view-tournament="${post.tournament_id}">View Tournament</button>` : ""}
       </article>`).join("") || '<p class="muted">No feed posts yet.</p>';

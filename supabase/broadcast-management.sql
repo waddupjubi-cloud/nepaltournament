@@ -5,6 +5,7 @@ alter table public.feed_posts
   add column if not exists audience_type text not null default 'all',
   add column if not exists target_role text,
   add column if not exists target_user_id uuid references public.profiles(id),
+  add column if not exists target_team_id uuid references public.teams(team_id),
   add column if not exists updated_at timestamptz not null default now();
 
 alter table public.feed_posts
@@ -12,7 +13,7 @@ alter table public.feed_posts
 
 alter table public.feed_posts
   add constraint feed_posts_audience_type_check
-  check (audience_type in ('all','users','players','staff','role','individual'));
+  check (audience_type in ('all','users','players','staff','role','individual','team'));
 
 with ranked as (
   select
@@ -39,7 +40,8 @@ alter table public.feed_posts
   add constraint feed_posts_pin_order_check
   check ((is_pinned = false and pin_order is null) or (is_pinned = true and pin_order between 1 and 5));
 
-create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id);
+drop index if exists feed_posts_audience_idx;
+create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id, target_team_id);
 create unique index if not exists feed_posts_pin_order_unique on public.feed_posts(pin_order) where is_pinned = true and pin_order is not null;
 
 drop trigger if exists feed_posts_updated_at on public.feed_posts;
@@ -85,8 +87,13 @@ create policy "feed read" on public.feed_posts for select using (
   or (audience_type = 'users' and auth.uid() is not null)
   or (audience_type = 'players' and public.current_role() in ('player','superadmin'))
   or (audience_type = 'staff' and public.current_staff_role() is not null)
-  or (audience_type = 'role' and (public.current_role() = target_role or public.current_staff_role() = target_role))
+  or (audience_type = 'role' and (
+    public.current_role() = target_role
+    or public.current_staff_role() = target_role
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and target_role = any(p.player_roles))
+  ))
   or (audience_type = 'individual' and target_user_id = auth.uid())
+  or (audience_type = 'team' and target_team_id is not null and public.is_team_member(target_team_id, auth.uid()))
   or author_id = auth.uid()
   or public.current_staff_role() is not null
 );

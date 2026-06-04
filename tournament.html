@@ -6,8 +6,10 @@
   <title>Tournament Players | Tournament</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/bracket.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
@@ -20,8 +22,8 @@
   <header class="top-nav"></header>
   <main class="page-shell">
     <section id="tournamentDetail" class="wide-panel"></section>
-    <section class="wide-panel"><div id="bracketRoot" class="bracket-scroll"></div></section>
-    <section class="wide-panel"><h2>Matches</h2><div id="matchList" class="list-stack"></div></section>
+    <section id="phaseArena" class="tournament-arena"></section>
+    <section id="tournamentStandings" class="wide-panel"></section>
   </main>
 </body>
 </html>

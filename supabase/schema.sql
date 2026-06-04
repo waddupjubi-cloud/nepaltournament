@@ -52,7 +52,7 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now(),
   constraint superadmin_staff_role check ((role = 'superadmin' and staff_role = 'superadmin') or role <> 'superadmin'),
   constraint profiles_staff_roles_check check (staff_roles <@ array['usermod','playermod','tournamentmod','useradmin','playeradmin','tournamentadmin','superadmin']),
-  constraint profiles_player_roles_check check (player_roles <@ array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole'])
+  constraint profiles_player_roles_check check (player_roles <@ array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole','founder','leader'])
 );
 
 create table if not exists public.player_appeals (
@@ -182,9 +182,10 @@ create table if not exists public.feed_posts (
   tournament_id uuid references public.tournaments(tournament_id),
   is_pinned boolean not null default false,
   pin_order integer,
-  audience_type text not null default 'all' check (audience_type in ('all','users','players','staff','role','individual')),
+  audience_type text not null default 'all' check (audience_type in ('all','users','players','staff','role','individual','team')),
   target_role text,
   target_user_id uuid references public.profiles(id),
+  target_team_id uuid references public.teams(team_id),
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   constraint feed_posts_pin_order_check check ((is_pinned = false and pin_order is null) or (is_pinned = true and pin_order between 1 and 5))
@@ -255,7 +256,7 @@ create index if not exists matches_tournament_idx on public.matches(tournament_i
 create index if not exists matches_phase_idx on public.matches(tournament_id, phase, round_number);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
 create index if not exists messages_team_idx on public.messages(team_id, created_at);
-create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id);
+create index if not exists feed_posts_audience_idx on public.feed_posts(audience_type, target_role, target_user_id, target_team_id);
 create unique index if not exists feed_posts_pin_order_unique on public.feed_posts(pin_order) where is_pinned = true and pin_order is not null;
 
 grant usage on schema public to anon, authenticated, service_role;
@@ -600,8 +601,13 @@ create policy "feed read" on public.feed_posts for select using (
   or (audience_type = 'users' and auth.uid() is not null)
   or (audience_type = 'players' and public.current_role() in ('player','superadmin'))
   or (audience_type = 'staff' and public.current_staff_role() is not null)
-  or (audience_type = 'role' and (public.current_role() = target_role or public.current_staff_role() = target_role))
+  or (audience_type = 'role' and (
+    public.current_role() = target_role
+    or public.current_staff_role() = target_role
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and target_role = any(p.player_roles))
+  ))
   or (audience_type = 'individual' and target_user_id = auth.uid())
+  or (audience_type = 'team' and target_team_id is not null and public.is_team_member(target_team_id, auth.uid()))
   or author_id = auth.uid()
   or public.current_staff_role() is not null
 );
@@ -643,8 +649,29 @@ create policy "conversations read" on public.conversations for select using (exi
 drop policy if exists "conversations create" on public.conversations;
 create policy "conversations create" on public.conversations for insert with check (auth.uid() is not null);
 
+create or replace function public.is_conversation_participant(target_conversation uuid, target_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.conversation_participants cp
+    where cp.conversation_id = target_conversation
+      and cp.user_id = target_user
+  );
+$$;
+
+grant execute on function public.is_conversation_participant(uuid, uuid) to authenticated;
+
 drop policy if exists "participants read" on public.conversation_participants;
-create policy "participants read" on public.conversation_participants for select using (user_id = auth.uid() or public.is_staff(array['superadmin','useradmin','usermod']));
+create policy "participants read" on public.conversation_participants for select using (
+  user_id = auth.uid()
+  or public.is_conversation_participant(conversation_id, auth.uid())
+  or public.is_staff(array['superadmin','useradmin','usermod'])
+);
 drop policy if exists "participants create" on public.conversation_participants;
 create policy "participants create" on public.conversation_participants for insert with check (user_id = auth.uid() or public.is_staff(array['superadmin','useradmin','usermod']));
 
@@ -665,6 +692,52 @@ drop policy if exists "support create" on public.support_tickets;
 create policy "support create" on public.support_tickets for insert with check (user_id = auth.uid());
 drop policy if exists "support staff update" on public.support_tickets;
 create policy "support staff update" on public.support_tickets for update using (assigned_mod_id = auth.uid() or public.is_staff(array['superadmin','useradmin','usermod'])) with check (assigned_mod_id = auth.uid() or public.is_staff(array['superadmin','useradmin','usermod']));
+
+create or replace function public.ensure_direct_conversation(other_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing_id uuid;
+  created_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be logged in to start a chat.';
+  end if;
+
+  if other_user_id is null or other_user_id = auth.uid() then
+    raise exception 'Choose another user to chat with.';
+  end if;
+
+  select c.conversation_id
+  into existing_id
+  from public.conversations c
+  join public.conversation_participants mine on mine.conversation_id = c.conversation_id and mine.user_id = auth.uid()
+  join public.conversation_participants other on other.conversation_id = c.conversation_id and other.user_id = other_user_id
+  where c.type = 'direct'
+  limit 1;
+
+  if existing_id is not null then
+    return existing_id;
+  end if;
+
+  insert into public.conversations(type)
+  values ('direct')
+  returning conversation_id into created_id;
+
+  insert into public.conversation_participants(conversation_id, user_id)
+  values
+    (created_id, auth.uid()),
+    (created_id, other_user_id)
+  on conflict do nothing;
+
+  return created_id;
+end;
+$$;
+
+grant execute on function public.ensure_direct_conversation(uuid) to authenticated;
 
 drop policy if exists "audit read" on public.audit_logs;
 create policy "audit read" on public.audit_logs for select using (public.is_staff(array['superadmin','useradmin','playeradmin','tournamentadmin']));

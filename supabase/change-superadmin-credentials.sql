@@ -69,7 +69,7 @@ begin
   end if;
 
   insert into public.profiles (id, full_name, username, role, staff_role, staff_roles, player_roles, is_verified, is_player_approved)
-  values (new_user_id, 'Super Admin', public.generate_username('Super Admin'), 'superadmin', 'superadmin', array['superadmin'], array['multirole'], true, true)
+  values (new_user_id, 'Super Admin', public.generate_username('Super Admin'), 'superadmin', 'superadmin', array['superadmin'], array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole','founder','leader'], true, true)
   on conflict (id) do update
   set
     full_name = 'Super Admin',
@@ -77,7 +77,7 @@ begin
     role = 'superadmin',
     staff_role = 'superadmin',
     staff_roles = array['superadmin'],
-    player_roles = array['multirole'],
+    player_roles = array['exp','jg','gd','md','rm','coach','sb1','sb2','multirole','founder','leader'],
     is_verified = true,
     is_player_approved = true,
     updated_at = now();
