@@ -3,15 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tournament Players | Create Team</title>
+  <title>Create a Team | Tournament Players Nepal</title>
+  <meta name="description" content="Create and submit an esports team in Tournament Players Nepal.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0066cc">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://zxrqfnrfshnvrnvuujmz.supabase.co" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
   <script defer src="js/auth.js"></script>
   <script defer src="js/notifications.js"></script>
+  <script defer src="js/messages.js"></script>
   <script defer src="js/teams.js"></script>
 </head>
 <body data-page="create-team">
@@ -20,8 +31,8 @@
     <section class="wide-panel">
       <div class="section-heading"><h1>Create team</h1></div>
       <form id="createTeamForm" class="stack">
-        <label class="field"><input id="teamName" required placeholder=" "><span>Team name</span></label>
-        <label class="field"><input id="teamTag" required maxlength="8" placeholder=" "><span>Team tag</span></label>
+        <label class="field"><input id="teamName" required minlength="2" maxlength="60" autocomplete="organization" placeholder=" "><span>Team name</span></label>
+        <label class="field"><input id="teamTag" required minlength="2" maxlength="8" pattern="[A-Za-z0-9]+" autocomplete="off" placeholder=" "><span>Team tag</span></label>
         <label class="field file-field"><input id="teamLogo" type="file" accept="image/*"><span>Logo upload</span></label>
         <button class="primary-button" type="submit">Create team</button>
       </form>

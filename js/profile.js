@@ -71,11 +71,10 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+  window.TPUtils.onAuthReady(() => {
     if (document.body.dataset.page !== "profile") return;
     renderProfileForm();
     renderRoles();
-    window.TPMessages?.renderMessenger("#messengerRoot");
     window.TPUtils.qs("#appealForm")?.addEventListener("submit", submitAppeal);
-  }, 250));
+  });
 })();

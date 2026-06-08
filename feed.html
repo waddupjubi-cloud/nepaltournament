@@ -3,30 +3,45 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tournament Players | Feed</title>
+  <title>Community Feed | Tournament Players Nepal</title>
+  <meta name="description" content="Tournament announcements, match updates, and community posts for Tournament Players Nepal members.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0066cc">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://zxrqfnrfshnvrnvuujmz.supabase.co" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
   <script defer src="js/auth.js"></script>
   <script defer src="js/notifications.js"></script>
+  <script defer src="js/messages.js"></script>
   <script defer src="js/feed.js"></script>
 </head>
 <body data-page="feed">
   <header class="top-nav"></header>
   <main class="feed-layout">
     <aside class="side-panel">
-      <h2>Chats</h2>
-      <div id="conversationList" class="list-stack"></div>
+      <h2>Quick jump</h2>
+      <nav class="list-stack" aria-label="Feed shortcuts">
+        <a class="secondary-button" href="messages.html">Direct messages</a>
+        <a class="secondary-button" href="tournaments.html">Live tournaments</a>
+        <a class="secondary-button" href="teams.html">Find teams</a>
+      </nav>
     </aside>
     <section class="feed-column">
       <div class="section-heading">
         <h1>Feed</h1>
         <button id="refreshFeed" class="secondary-button" type="button">Refresh</button>
       </div>
-      <div id="feedPosts" class="post-list"></div>
+      <div id="feedPosts" class="post-list" aria-live="polite"></div>
     </section>
     <aside class="side-panel profile-summary" id="profileSummary"></aside>
   </main>

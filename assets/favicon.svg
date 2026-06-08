@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Tournament Players</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0878e8"/>
+      <stop offset="0.58" stop-color="#0053b8"/>
+      <stop offset="1" stop-color="#ff335f"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="18" y1="12" x2="48" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#09070a"/>
+  <path d="M10 18 32 6l22 12v28L32 58 10 46V18Z" fill="url(#bg)" stroke="#fff" stroke-opacity=".24" stroke-width="2"/>
+  <path d="M17 20h30v8H36v22h-8V28H17v-8Z" fill="url(#shine)"/>
+  <path d="M39 32h8v8h-8zM17 32h8v8h-8z" fill="#fff" fill-opacity=".82"/>
+</svg>

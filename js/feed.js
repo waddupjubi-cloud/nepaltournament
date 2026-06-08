@@ -4,26 +4,21 @@
     const root = U.qs("#feedPosts");
     if (!root || !window.currentProfile) return;
     root.innerHTML = U.spinner();
-    const [{ data, error }, { data: teams }] = await Promise.all([
-      window.tpSupabase
+    const { data, error } = await window.tpSupabase
       .from("feed_posts")
-      .select("*, tournaments(tournament_id,name,status,start_date)")
+      .select("post_id,author_role,title,content,media_url,tournament_id,is_pinned,pin_order,audience_type,target_user_id,created_at,tournaments(tournament_id,name,status,start_date)")
       .order("is_pinned", { ascending: false })
       .order("pin_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
-      .limit(50),
-      window.tpSupabase.from("teams").select("team_id, team_name, team_tag").eq("status", "approved")
-    ]);
+      .limit(50);
     if (error) {
       root.innerHTML = `<p class="message error">${U.escapeHtml(error.message)}</p>`;
       return;
     }
-    const teamMap = new Map((teams || []).map((team) => [team.team_id, team]));
     const audienceLabel = (post) => {
-      const team = teamMap.get(post.target_team_id);
-      return post.audience_type === "team" && team
-        ? `team - ${team.team_name} [${team.team_tag}]`
-        : post.audience_type || "all";
+      if (post.audience_type === "individual") return "individual broadcast";
+      if (post.audience_type === "team") return "team broadcast";
+      return post.audience_type || "all";
     };
     root.innerHTML = (data || []).map((post) => `
       <article class="post-card">
@@ -36,7 +31,7 @@
         </div>
         <p>${U.escapeHtml(post.content)}</p>
         <p class="muted">${U.escapeHtml(audienceLabel(post))} - ${new Date(post.created_at).toLocaleString()}</p>
-        ${post.media_url ? `<img src="${U.escapeHtml(post.media_url)}" alt="" style="width:100%;border-radius:8px">` : ""}
+        ${post.media_url ? `<img class="post-media" src="${U.escapeHtml(post.media_url)}" alt="${U.escapeHtml(post.title)}" loading="lazy" decoding="async">` : ""}
         ${post.tournament_id ? `<button class="secondary-button" type="button" data-view-tournament="${post.tournament_id}">View Tournament</button>` : ""}
       </article>`).join("") || '<p class="muted">No feed posts yet.</p>';
     U.qsa("[data-view-tournament]", root).forEach((button) => {
@@ -46,7 +41,7 @@
 
   async function openTournamentModal(id) {
     const U = window.TPUtils;
-    const { data, error } = await window.tpSupabase.from("tournaments").select("*").eq("tournament_id", id).single();
+    const { data, error } = await window.tpSupabase.from("tournaments").select("tournament_id,name,description,status,team_capacity,start_date").eq("tournament_id", id).single();
     if (error) return U.openModal("Tournament", `<p class="message error">${U.escapeHtml(error.message)}</p>`);
     U.openModal(data.name, `
       <p>${U.escapeHtml(data.description || "No description yet.")}</p>
@@ -81,13 +76,11 @@
       .subscribe();
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    setTimeout(() => {
-      if (document.body.dataset.page !== "feed") return;
-      renderProfileSummary();
-      loadFeed();
-      initRealtime();
-      window.TPUtils.qs("#refreshFeed")?.addEventListener("click", loadFeed);
-    }, 250);
+  window.TPUtils.onAuthReady(() => {
+    if (document.body.dataset.page !== "feed") return;
+    renderProfileSummary();
+    loadFeed();
+    initRealtime();
+    window.TPUtils.qs("#refreshFeed")?.addEventListener("click", loadFeed);
   });
 })();

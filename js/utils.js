@@ -52,24 +52,47 @@
   }
 
   function spinner() {
-    return '<div class="spinner" aria-label="Loading"></div>';
+    return '<div class="spinner" role="status" aria-label="Loading"></div>';
+  }
+
+  function onAuthReady(callback) {
+    if (window.currentProfile) {
+      queueMicrotask(() => callback({ profile: window.currentProfile, session: window.currentSession }));
+      return;
+    }
+    document.addEventListener("tp:auth-ready", (event) => callback(event.detail), { once: true });
+  }
+
+  function updateDocumentMeta(title, description) {
+    if (title) document.title = `${title} | Tournament Players Nepal`;
+    const descriptionMeta = qs('meta[name="description"]');
+    if (description && descriptionMeta) descriptionMeta.content = description;
   }
 
   function initTheme() {
     const saved = localStorage.getItem("tp-theme");
     if (saved === "dark") document.body.classList.add("dark");
+    const syncButtons = () => {
+      const dark = document.body.classList.contains("dark") || document.body.classList.contains("staff-surface");
+      qsa(".theme-toggle").forEach((button) => button.setAttribute("aria-pressed", String(dark)));
+    };
     qsa(".theme-toggle").forEach((button) => {
+      if (button.dataset.themeBound) return;
+      button.dataset.themeBound = "true";
       button.addEventListener("click", () => {
         document.body.classList.toggle("dark");
         localStorage.setItem("tp-theme", document.body.classList.contains("dark") ? "dark" : "light");
+        syncButtons();
       });
     });
+    syncButtons();
   }
 
   function renderNav(profile) {
     const nav = qs(".top-nav");
     if (!nav) return;
     const page = document.body.dataset.page;
+    const activePage = { team: "teams", "create-team": "teams", tournament: "tournaments" }[page] || page;
     const staffRoles = [profile?.staff_role, ...(Array.isArray(profile?.staff_roles) ? profile.staff_roles : [])].filter(Boolean);
     const isPlayer = ["player", "superadmin"].includes(profile?.role) || profile?.is_player_approved;
     const links = [
@@ -77,16 +100,16 @@
       ["profile", "profile.html", "fa-user", "Profile"],
       ["tournaments", "tournaments.html", "fa-trophy", "Tournaments"],
       ...(isPlayer ? [["teams", "teams.html", "fa-people-group", "Teams"]] : []),
-      ["notifications", "profile.html#notifications", "fa-bell", "Alerts"],
-      ["messages", "profile.html#messages", "fa-message", "Messages"]
+      ["alerts", "alerts.html", "fa-bell", "Alerts"],
+      ["messages", "messages.html", "fa-message", "Messages"]
     ];
     nav.innerHTML = `
       <a class="brand" href="feed.html">Tournament Players</a>
-      <nav class="nav-links">
+      <nav class="nav-links" aria-label="Primary navigation">
         ${links.map(([key, href, icon, label]) => `
-          <a class="nav-link ${page === key ? "is-active" : ""}" href="${href}">
-            <i class="fa-solid ${icon}"></i><span>${label}</span>
-            ${key === "notifications" ? '<span id="notificationBadge" class="badge hidden">0</span>' : ""}
+          <a class="nav-link ${activePage === key ? "is-active" : ""}" href="${href}" ${activePage === key ? 'aria-current="page"' : ""}>
+            <i class="fa-solid ${icon}" aria-hidden="true"></i><span>${label}</span>
+            ${key === "alerts" ? '<span id="notificationBadge" class="badge hidden">0</span>' : ""}
           </a>
         `).join("")}
       </nav>
@@ -101,25 +124,44 @@
 
   function openModal(title, bodyHtml, actionsHtml) {
     const root = qs("#modalRoot") || document.body;
+    const activeElement = document.activeElement;
     const backdrop = document.createElement("div");
+    const titleId = `modal-title-${Date.now()}`;
     backdrop.className = "modal-backdrop";
     backdrop.innerHTML = `
-      <section class="modal" role="dialog" aria-modal="true">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1">
         <div class="section-heading">
-          <h2>${escapeHtml(title)}</h2>
+          <h2 id="${titleId}">${escapeHtml(title)}</h2>
           <button class="icon-button" type="button" data-close-modal aria-label="Close">x</button>
         </div>
         <div>${bodyHtml}</div>
         <div class="toolbar" style="margin-top:16px">${actionsHtml || ""}</div>
       </section>`;
+    const close = () => {
+      backdrop.remove();
+      activeElement?.focus?.();
+    };
     backdrop.addEventListener("click", (event) => {
-      if (event.target === backdrop || event.target.matches("[data-close-modal]")) backdrop.remove();
+      if (event.target === backdrop || event.target.matches("[data-close-modal]")) close();
+    });
+    backdrop.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
     });
     root.appendChild(backdrop);
+    qs(".modal", backdrop)?.focus();
   }
 
   function getParam(name) {
     return new URLSearchParams(location.search).get(name);
+  }
+
+  function safeHref(value) {
+    try {
+      const url = new URL(String(value || ""), location.href);
+      return url.origin === location.origin ? url.href : "#";
+    } catch {
+      return "#";
+    }
   }
 
   function rolePills(values) {
@@ -131,32 +173,52 @@
   function drawMatrix(canvas) {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const chars = "TP0123456789";
     let columns = [];
+    let width = 0;
+    let height = 0;
+    let frameId = 0;
+    let lastFrame = 0;
     function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      columns = Array(Math.ceil(canvas.width / 18)).fill(1);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      columns = Array(Math.ceil(width / 18)).fill(1);
     }
-    function frame() {
+    function frame(time = 0) {
+      if (!reduceMotion.matches && time - lastFrame < 32) {
+        frameId = requestAnimationFrame(frame);
+        return;
+      }
+      lastFrame = time;
       const styles = getComputedStyle(document.body);
       const accent = styles.getPropertyValue("--accent").trim() || "#0066cc";
       const isDark = document.body.classList.contains("dark") || document.body.classList.contains("staff-surface");
       ctx.fillStyle = isDark ? "rgba(9,7,10,0.1)" : "rgba(230,240,255,0.16)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = accent;
       ctx.font = "14px monospace";
       columns.forEach((y, index) => {
         const text = chars[Math.floor(Math.random() * chars.length)];
         ctx.fillText(text, index * 18, y * 18);
-        if (y * 18 > canvas.height && Math.random() > 0.975) columns[index] = 0;
+        if (y * 18 > height && Math.random() > 0.975) columns[index] = 0;
         columns[index] = y + 1;
       });
-      requestAnimationFrame(frame);
+      if (!document.hidden && !reduceMotion.matches) frameId = requestAnimationFrame(frame);
+    }
+    function start() {
+      cancelAnimationFrame(frameId);
+      if (!document.hidden) frame();
     }
     resize();
     window.addEventListener("resize", resize);
-    frame();
+    document.addEventListener("visibilitychange", start);
+    reduceMotion.addEventListener?.("change", start);
+    start();
   }
 
   function drawArena(canvas) {
@@ -166,6 +228,8 @@
     let width = 0;
     let height = 0;
     let nodes = [];
+    let frameId = 0;
+    let lastFrame = 0;
 
     function themeValue(name, fallback) {
       return getComputedStyle(document.body).getPropertyValue(name).trim() || fallback;
@@ -270,18 +334,30 @@
     }
 
     function frame(time) {
+      if (!reduceMotion.matches && time - lastFrame < 32) {
+        frameId = requestAnimationFrame(frame);
+        return;
+      }
+      lastFrame = time;
       const accent = themeValue("--accent", "#0066cc");
       const accentAlt = themeValue("--accent-alt", "#ffcc00");
       ctx.clearRect(0, 0, width, height);
       drawGrid(time, accent, accentAlt);
       drawLanes(time, accent, accentAlt);
       drawNodes(time, accent, accentAlt);
-      if (!reduceMotion.matches) requestAnimationFrame(frame);
+      if (!document.hidden && !reduceMotion.matches) frameId = requestAnimationFrame(frame);
+    }
+
+    function start() {
+      cancelAnimationFrame(frameId);
+      if (!document.hidden) frame(performance.now());
     }
 
     resize();
     window.addEventListener("resize", resize);
-    requestAnimationFrame(frame);
+    document.addEventListener("visibilitychange", start);
+    reduceMotion.addEventListener?.("change", start);
+    start();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -290,5 +366,5 @@
     drawArena(qs("#arenaCanvas"));
   });
 
-  window.TPUtils = { qs, qsa, escapeHtml, formatDate, isAtLeast13, setMessage, spinner, renderNav, openModal, getParam, rolePills, roles };
+  window.TPUtils = { qs, qsa, escapeHtml, safeHref, formatDate, isAtLeast13, setMessage, spinner, onAuthReady, updateDocumentMeta, renderNav, openModal, getParam, rolePills, roles };
 })();

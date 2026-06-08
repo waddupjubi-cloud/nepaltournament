@@ -3,10 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tournament Players | Profile</title>
+  <title>Your Profile | Tournament Players Nepal</title>
+  <meta name="description" content="Manage your Tournament Players Nepal profile, player roles, and account details.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0066cc">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://zxrqfnrfshnvrnvuujmz.supabase.co" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
@@ -20,7 +30,7 @@
   <main class="page-shell">
     <section class="wide-panel">
       <div class="section-heading"><h1>Profile</h1></div>
-      <form id="profileForm" class="form-grid"></form>
+      <form id="profileForm" class="form-grid" aria-live="polite"></form>
     </section>
     <section class="wide-panel">
       <div class="section-heading"><h2>Appeal to become a player</h2></div>
@@ -32,14 +42,6 @@
         </label>
         <button class="primary-button" type="submit">Submit appeal</button>
       </form>
-    </section>
-    <section id="notifications" class="wide-panel">
-      <div class="section-heading"><h2>Alerts</h2><button id="markAlertsRead" class="secondary-button" type="button">Mark read</button></div>
-      <div id="alertList" class="list-stack"></div>
-    </section>
-    <section id="messages" class="wide-panel messenger-panel">
-      <div class="section-heading"><h2>Messages</h2><span class="pill good">Direct chat</span></div>
-      <div id="messengerRoot"></div>
     </section>
   </main>
   <div id="modalRoot"></div>

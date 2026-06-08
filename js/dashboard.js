@@ -17,6 +17,14 @@
     broadcasts: ["fa-bullhorn", "Broadcasts"],
     audit: ["fa-clipboard-list", "Audit Logs"]
   };
+  const modulePages = {
+    overview: "dashboard.html",
+    broadcasts: "broadcasts.html",
+    users: "user-management.html",
+    players: "player-management.html",
+    tournaments: "tournament-management.html",
+    audit: "audit-logs.html"
+  };
 
   const userRoles = ["user", "player"];
   const staffRoles = ["usermod", "playermod", "tournamentmod", "useradmin", "playeradmin", "tournamentadmin"];
@@ -203,6 +211,16 @@
     return String(action || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
+  function canViewActivityDetail(log) {
+    if (hasRole("superadmin")) return true;
+    const department = actionDepartment(log?.action);
+    if (department === "User Management") return hasRole("useradmin");
+    if (department === "Player Management") return hasRole("playeradmin");
+    if (department === "Tournament") return hasRole("tournamentadmin");
+    if (department === "Broadcast") return hasRole("useradmin", "playeradmin", "tournamentadmin");
+    return false;
+  }
+
   function optionList(options, selected, emptyLabel) {
     const empty = emptyLabel !== undefined ? `<option value="">${emptyLabel}</option>` : "";
     return empty + options.map((option) => `<option value="${option}" ${String(selected || "") === String(option) ? "selected" : ""}>${option}</option>`).join("");
@@ -217,6 +235,51 @@
 
   function checkedValues(name, root = document) {
     return U().qsa(`input[name="${name}"]:checked`, root).map((input) => input.value);
+  }
+
+  function renderBulkBar({ id, checkboxName, actions, roleOptions = [], actionLabel = "Apply bulk action" }) {
+    return `<div id="${id}" class="bulk-action-bar">
+      <label class="check-row"><input id="${id}SelectAll" type="checkbox"> <span>Select visible</span></label>
+      <span id="${id}Count" class="pill">0 selected</span>
+      <label class="field"><select id="${id}Action"><option value="">Choose action</option>${actions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select><span>Bulk action</span></label>
+      ${roleOptions.length ? `<label class="field"><select id="${id}Role"><option value="">Choose role</option>${roleOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select><span>Role when needed</span></label>` : ""}
+      <button id="${id}Apply" class="primary-button" type="button">${actionLabel}</button>
+      <p id="${id}Message" class="message" role="status"></p>
+    </div>`;
+  }
+
+  function bindBulkSelection(id, checkboxName) {
+    const selectAll = U().qs(`#${id}SelectAll`);
+    const sync = () => {
+      const boxes = U().qsa(`input[name="${checkboxName}"]`);
+      const selected = boxes.filter((box) => box.checked);
+      const count = U().qs(`#${id}Count`);
+      if (count) count.textContent = `${selected.length} selected`;
+      if (selectAll) {
+        selectAll.checked = Boolean(boxes.length) && selected.length === boxes.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
+      }
+    };
+    if (selectAll) selectAll.onchange = () => {
+      U().qsa(`input[name="${checkboxName}"]`).forEach((box) => {
+        box.checked = selectAll.checked;
+      });
+      sync();
+    };
+    U().qsa(`input[name="${checkboxName}"]`).forEach((box) => box.onchange = sync);
+    sync();
+  }
+
+  async function runBulkItems(items, handler) {
+    const failures = [];
+    for (const item of items) {
+      try {
+        await handler(item);
+      } catch (error) {
+        failures.push(error.message || String(error));
+      }
+    }
+    if (failures.length) throw new Error(`${failures.length} action(s) failed. ${failures[0]}`);
   }
 
   function relativeTime(value) {
@@ -292,19 +355,14 @@
 
   function renderSidebar() {
     const modules = modulesFor();
+    const requestedModule = document.body.dataset.dashboardModule || "overview";
+    const initialModule = modules.includes(requestedModule) ? requestedModule : modules[0] || "overview";
     const root = U().qs("#dashSidebar");
-    root.innerHTML = `<div class="dash-brand"><span>Tournament Players</span></div>` + modules.map((mod, index) => `
-      <button class="dash-nav-button ${index === 0 ? "is-active" : ""}" type="button" data-module="${mod}">
+    root.innerHTML = `<div class="dash-brand"><span>Tournament Players</span></div>` + modules.map((mod) => `
+      <a class="dash-nav-button ${mod === initialModule ? "is-active" : ""}" href="${modulePages[mod]}" ${mod === initialModule ? 'aria-current="page"' : ""}>
         <i class="fa-solid ${labels[mod][0]}"></i><span>${labels[mod][1]}</span>
-      </button>`).join("");
-    U().qsa("[data-module]", root).forEach((button) => {
-      button.addEventListener("click", () => {
-        U().qsa("[data-module]", root).forEach((item) => item.classList.remove("is-active"));
-        button.classList.add("is-active");
-        loadModule(button.dataset.module);
-      });
-    });
-    loadModule(modules[0] || "overview");
+      </a>`).join("");
+    loadModule(initialModule);
   }
 
   async function loadModule(module) {
@@ -656,6 +714,16 @@
   async function users() {
     const { data, error } = await db().from("profiles").select("*").order("created_at", { ascending: false }).limit(300);
     if (error) return U().qs("#dashContent").innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
+    const bulkActions = [
+      ...(hasRole("superadmin", "useradmin") ? [["verify", "Verify selected"], ["unverify", "Unverify selected"]] : []),
+      ...(canEditPlayerRoles() ? [["approve-player", "Approve as players"], ["add-player-role", "Add player role"], ["remove-player-role", "Remove player role"]] : []),
+      ...(staffRoleChoicesForCurrentUser().length ? [["add-staff-role", "Add staff role"], ["remove-staff-role", "Remove staff role"]] : []),
+      ...(hasRole("superadmin") ? [["delete", "Delete selected Auth users"]] : [])
+    ];
+    const bulkRoles = [
+      ...playerRoles.map((role) => [`player:${role}`, `Player: ${role}`]),
+      ...staffRoleChoicesForCurrentUser().map((role) => [`staff:${role}`, `Staff: ${role}`])
+    ];
     U().qs("#dashContent").innerHTML = `
       ${canCreateUsers() ? renderCreateUserPanel() : ""}
       <section class="table-wrap">
@@ -663,17 +731,20 @@
           <label class="field"><input id="userSearch" placeholder=" "><span>Search users by name, username, IGN, or role</span></label>
           <label class="field"><select id="userPlayerStatusFilter"><option value="all">All player states</option><option value="approved">Player approved</option><option value="pending">Player pending</option><option value="verified">Verified users</option><option value="unverified">Unverified users</option></select><span>Status</span></label>
         </div>
+        ${bulkActions.length ? renderBulkBar({ id: "bulkUsers", checkboxName: "selectedUsers", actions: bulkActions, roleOptions: bulkRoles }) : ""}
         <table>
-          <thead><tr><th>Name</th><th>Role</th><th>Player Roles</th><th>Staff</th><th>Verified</th><th>Actions</th></tr></thead>
+          <thead><tr><th class="selection-cell">Pick</th><th>Name</th><th>Role</th><th>Player Roles</th><th>Staff</th><th>Verified</th><th>Actions</th></tr></thead>
           <tbody id="userRows">${renderUserRows(data)}</tbody>
         </table>
       </section>
       <section class="wide-panel"><h2>Player Appeals</h2><div id="appealsList" class="list-stack"></div></section>`;
     bindCreateUser();
     bindUserActions(data);
+    bindBulkUserActions(data);
     const applyUserFilters = () => {
       U().qs("#userRows").innerHTML = renderUserRows(data, U().qs("#userSearch")?.value || "", U().qs("#userPlayerStatusFilter")?.value || "all");
       bindUserActions(data);
+      bindBulkSelection("bulkUsers", "selectedUsers");
     };
     U().qs("#userSearch")?.addEventListener("input", applyUserFilters);
     U().qs("#userPlayerStatusFilter")?.addEventListener("change", applyUserFilters);
@@ -715,11 +786,12 @@
         || (status === "unverified" && !profile.is_verified);
       return matchesTerm && matchesStatus;
     });
-    return filtered.map(renderUserRow).join("") || `<tr><td colspan="6" class="muted">No users match that search.</td></tr>`;
+    return filtered.map(renderUserRow).join("") || `<tr><td colspan="7" class="muted">No users match that search.</td></tr>`;
   }
 
   function renderUserRow(p) {
     return `<tr>
+      <td class="selection-cell"><input type="checkbox" name="selectedUsers" value="${p.id}" aria-label="Select ${U().escapeHtml(p.full_name || p.username)}"></td>
       <td>${U().escapeHtml(p.full_name)}<br><span class="muted">@${U().escapeHtml(p.username || "username")}${p.ign ? ` - ${U().escapeHtml(p.ign)}` : ""}</span></td>
       <td>${U().escapeHtml(p.role)}</td>
       <td>${U().rolePills(playerRolesFor(p)) || '<span class="muted">-</span>'}</td>
@@ -812,6 +884,69 @@
       await logAction(nextValue ? "verify_user" : "unverify_user", profile.id, { username: profile.username, full_name: profile.full_name });
       users();
     }));
+  }
+
+  function bindBulkUserActions(profiles) {
+    if (!U().qs("#bulkUsers")) return;
+    bindBulkSelection("bulkUsers", "selectedUsers");
+    U().qs("#bulkUsersApply").onclick = async () => {
+      const selected = new Set(checkedValues("selectedUsers"));
+      const targets = profiles.filter((profile) => selected.has(profile.id));
+      const action = U().qs("#bulkUsersAction").value;
+      const roleValue = U().qs("#bulkUsersRole")?.value || "";
+      if (!targets.length || !action) return U().setMessage("#bulkUsersMessage", "Select users and an action.", "error");
+      if (!confirm(`${actionLabel(action)} for ${targets.length} selected user(s)?`)) return;
+      U().setMessage("#bulkUsersMessage", `Working on ${targets.length} user(s)...`);
+      try {
+        await runBulkItems(targets, async (profile) => {
+          if (action === "verify" || action === "unverify") {
+            if (!canManageUserVerification(profile)) throw new Error(`Cannot change verification for ${profile.full_name}.`);
+            const is_verified = action === "verify";
+            const { error } = await db().from("profiles").update({ is_verified }).eq("id", profile.id);
+            if (error) throw error;
+            await logAction(is_verified ? "bulk_verify_user" : "bulk_unverify_user", profile.id, {});
+            return;
+          }
+          if (action === "approve-player") {
+            if (!canEditPlayerRoles() || hasStaffRole(profile, "superadmin")) throw new Error(`Cannot approve ${profile.full_name}.`);
+            const nextRoles = playerRolesFor(profile).length ? playerRolesFor(profile) : ["multirole"];
+            const { error } = await db().from("profiles").update({ role: "player", is_player_approved: true, player_roles: nextRoles }).eq("id", profile.id);
+            if (error) throw error;
+            await logAction("bulk_approve_player", profile.id, { player_roles: nextRoles });
+            return;
+          }
+          if (action === "add-player-role" || action === "remove-player-role") {
+            const role = roleValue.startsWith("player:") ? roleValue.slice(7) : "";
+            if (!role || !playerRoles.includes(role) || !canEditPlayerRoles() || hasStaffRole(profile, "superadmin")) throw new Error("Choose an allowed player role.");
+            const nextRoles = action === "add-player-role" ? uniqueValues([...playerRolesFor(profile), role]) : playerRolesFor(profile).filter((item) => item !== role);
+            const payload = { player_roles: nextRoles, ...(action === "add-player-role" ? { role: "player", is_player_approved: true } : {}) };
+            const { error } = await db().from("profiles").update(payload).eq("id", profile.id);
+            if (error) throw error;
+            await logAction(`bulk_${action.replace(/-/g, "_")}`, profile.id, { role });
+            return;
+          }
+          if (action === "add-staff-role" || action === "remove-staff-role") {
+            const role = roleValue.startsWith("staff:") ? roleValue.slice(6) : "";
+            if (!role || !canAssignStaffRole(role) || hasStaffRole(profile, "superadmin")) throw new Error("Choose an allowed staff role.");
+            const existing = rawStaffRolesFor(profile).filter((item) => item !== "superadmin");
+            const nextRoles = action === "add-staff-role" ? uniqueValues([...existing, role]) : existing.filter((item) => item !== role);
+            const { error } = await db().from("profiles").update({ staff_roles: nextRoles, staff_role: nextRoles[0] || null }).eq("id", profile.id);
+            if (error) throw error;
+            await logAction(`bulk_${action.replace(/-/g, "_")}`, profile.id, { role });
+            return;
+          }
+          if (action === "delete") {
+            if (!canDeleteUsers(profile)) throw new Error(`Cannot delete ${profile.full_name}.`);
+            await callAdminUsersFunction("deleteUser", { user_id: profile.id });
+            await logAction("bulk_delete_user", profile.id, {});
+          }
+        });
+        U().setMessage("#bulkUsersMessage", `${targets.length} user(s) updated.`, "success");
+        users();
+      } catch (error) {
+        U().setMessage("#bulkUsersMessage", error.message, "error");
+      }
+    };
   }
 
   function openPasswordReset(userId) {
@@ -909,10 +1044,13 @@
       ? await db().from("profiles").select("id, full_name, ign, username").in("id", applicantIds)
       : { data: [] };
     const applicantMap = new Map((applicants || []).map((profile) => [profile.id, profile]));
-    root.innerHTML = (appeals || []).map((a) => {
+    const pendingAppeals = (appeals || []).filter((appeal) => appeal.status === "pending");
+    root.innerHTML = `${canManagePlayerAppeals() && pendingAppeals.length ? renderBulkBar({ id: "bulkAppeals", checkboxName: "selectedAppeals", actions: [["approve", "Approve selected"], ["reject", "Reject selected"]] }) : ""}${(appeals || []).map((a) => {
       const applicant = applicantMap.get(a.user_id);
       return `
-      <div class="item-card">
+      <div class="item-card ${a.status === "pending" ? "selectable-card" : ""}">
+        ${a.status === "pending" && canManagePlayerAppeals() ? `<input type="checkbox" name="selectedAppeals" value="${a.appeal_id}" aria-label="Select appeal from ${U().escapeHtml(applicant?.full_name || a.user_id)}">` : ""}
+        <div>
         <div class="section-heading">
           <div><strong>${U().escapeHtml(applicant?.full_name || a.user_id)}</strong><p class="muted">@${U().escapeHtml(applicant?.username || "username")} - ${U().escapeHtml(a.status)}</p></div>
           ${U().rolePills(a.preferred_roles)}
@@ -923,8 +1061,9 @@
             <button class="primary-button" type="button" data-approve-appeal="${a.appeal_id}" data-user="${a.user_id}">Approve</button>
             <button class="secondary-button" type="button" data-reject-appeal="${a.appeal_id}">Reject</button>
           </div>` : ""}
+        </div>
       </div>`;
-    }).join("") || '<p class="muted">No appeals yet.</p>';
+    }).join("") || '<p class="muted">No appeals yet.</p>'}`;
     U().qsa("[data-approve-appeal]").forEach((button) => button.addEventListener("click", async () => {
       const appeal = (appeals || []).find((item) => item.appeal_id === button.dataset.approveAppeal);
       await db().from("profiles").update({ role: "player", is_player_approved: true, player_roles: appeal?.preferred_roles || ["multirole"] }).eq("id", button.dataset.user);
@@ -937,6 +1076,30 @@
       await logAction("reject_player_appeal", button.dataset.rejectAppeal, {});
       loadAppeals();
     }));
+    if (U().qs("#bulkAppeals")) {
+      bindBulkSelection("bulkAppeals", "selectedAppeals");
+      U().qs("#bulkAppealsApply").onclick = async () => {
+        const selected = new Set(checkedValues("selectedAppeals"));
+        const targets = pendingAppeals.filter((appeal) => selected.has(appeal.appeal_id));
+        const action = U().qs("#bulkAppealsAction").value;
+        if (!targets.length || !["approve", "reject"].includes(action)) return U().setMessage("#bulkAppealsMessage", "Select pending appeals and an action.", "error");
+        if (!confirm(`${action} ${targets.length} player appeal(s)?`)) return;
+        try {
+          await runBulkItems(targets, async (appeal) => {
+            if (action === "approve") {
+              const { error: profileError } = await db().from("profiles").update({ role: "player", is_player_approved: true, player_roles: appeal.preferred_roles || ["multirole"] }).eq("id", appeal.user_id);
+              if (profileError) throw profileError;
+            }
+            const { error: appealError } = await db().from("player_appeals").update({ status: action === "approve" ? "approved" : "rejected", reviewed_by: me().id, reviewed_at: new Date().toISOString() }).eq("appeal_id", appeal.appeal_id);
+            if (appealError) throw appealError;
+            await logAction(`bulk_${action}_player_appeal`, appeal.user_id, { appeal_id: appeal.appeal_id });
+          });
+          loadAppeals();
+        } catch (error) {
+          U().setMessage("#bulkAppealsMessage", error.message, "error");
+        }
+      };
+    }
   }
 
   async function players() {
@@ -961,6 +1124,7 @@
       </section>
       <section class="wide-panel">
         <div class="section-heading"><h2>Pending Team Approvals</h2><span class="pill warn">${pendingRequests.length} waiting</span></div>
+        ${canManageTeams() && pendingRequests.length ? renderBulkBar({ id: "bulkTeamRequests", checkboxName: "selectedTeamRequests", actions: [["approve", "Approve selected"], ["reject", "Reject selected"]] }) : ""}
         <div id="pendingTeamRequests" class="list-stack">${pendingRequests.map(renderTeamRequest).join("") || '<p class="muted">No pending team approval requests.</p>'}</div>
       </section>
       <section class="wide-panel">
@@ -976,7 +1140,8 @@
           <label class="field"><input id="teamSearch" type="search" placeholder=" "><span>Search teams</span></label>
           <label class="field"><select id="teamStatusFilter"><option value="all">All team states</option><option value="recruiting">Recruiting</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="disbanded">Disbanded</option></select><span>Status</span></label>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Team</th><th>Status</th><th>Roster</th><th>Actions</th></tr></thead><tbody id="teamRows">
+        ${canManageTeams() ? renderBulkBar({ id: "bulkTeams", checkboxName: "selectedTeams", actions: [["approve", "Set approved"], ["recruiting", "Set recruiting"], ["pending", "Set pending"], ["disbanded", "Set disbanded"], ...(canDeleteTeams() ? [["delete", "Delete selected"]] : [])] }) : ""}
+        <div class="table-wrap"><table><thead><tr><th class="selection-cell">Pick</th><th>Team</th><th>Status</th><th>Roster</th><th>Actions</th></tr></thead><tbody id="teamRows">
           ${(teams.data || []).map((team) => renderTeamRow(team)).join("")}
         </tbody></table></div>
       </section>`;
@@ -984,6 +1149,7 @@
     bindTeamActions(teams.data || [], players, membershipsResult.data || []);
     bindTeamApprovalFilters(teamRequests);
     bindTeamTableFilters(teams.data || [], players, membershipsResult.data || []);
+    bindBulkTeamActions(teamRequests, teams.data || []);
   }
 
   function bindTeamTableFilters(teams, playersList, memberships) {
@@ -994,8 +1160,9 @@
         const text = `${team.team_name || ""} ${team.team_tag || ""} ${team.status || ""}`.toLowerCase();
         return (!term || text.includes(term)) && (status === "all" || team.status === status);
       });
-      U().qs("#teamRows").innerHTML = filtered.map(renderTeamRow).join("") || '<tr><td colspan="4" class="muted">No teams match that search.</td></tr>';
+      U().qs("#teamRows").innerHTML = filtered.map(renderTeamRow).join("") || '<tr><td colspan="5" class="muted">No teams match that search.</td></tr>';
       bindTeamActions(teams, playersList, memberships);
+      bindBulkSelection("bulkTeams", "selectedTeams");
     };
     U().qs("#teamSearch")?.addEventListener("input", applyFilters);
     U().qs("#teamStatusFilter")?.addEventListener("change", applyFilters);
@@ -1015,13 +1182,16 @@
       U().qs("#approvedTeamRequests").innerHTML = byStatus("approved").map(renderTeamRequest).join("") || '<p class="muted">No approved team requests match.</p>';
       U().qs("#rejectedTeamRequests").innerHTML = byStatus("rejected").map(renderTeamRequest).join("") || '<p class="muted">No rejected team requests match.</p>';
       bindTeamRequests();
+      bindBulkSelection("bulkTeamRequests", "selectedTeamRequests");
     };
     U().qs("#teamApprovalSearch")?.addEventListener("input", applyFilters);
     U().qs("#teamApprovalStatusFilter")?.addEventListener("change", applyFilters);
   }
 
   function renderTeamRequest(request) {
-    return `<div class="item-card">
+    return `<div class="item-card ${request.status === "pending" && canManageTeams() ? "selectable-card" : ""}">
+      ${request.status === "pending" && canManageTeams() ? `<input type="checkbox" name="selectedTeamRequests" value="${request.request_id}" aria-label="Select ${U().escapeHtml(request.teams?.team_name || request.team_id)} approval">` : ""}
+      <div>
       <strong>${U().escapeHtml(request.teams?.team_name || request.team_id)}</strong>
       <p class="muted">${U().escapeHtml(request.status)} - ${U().formatDate(request.created_at)}</p>
       ${canManageTeams() && request.status === "pending" ? `
@@ -1029,11 +1199,13 @@
           <button class="primary-button" type="button" data-approve-team="${request.request_id}" data-team="${request.team_id}">Approve</button>
           <button class="secondary-button" type="button" data-reject-team="${request.request_id}">Reject</button>
         </div>` : ""}
+      </div>
     </div>`;
   }
 
   function renderTeamRow(team) {
     return `<tr>
+      <td class="selection-cell"><input type="checkbox" name="selectedTeams" value="${team.team_id}" aria-label="Select ${U().escapeHtml(team.team_name)}"></td>
       <td>${U().escapeHtml(team.team_name)}<br><span class="muted">[${U().escapeHtml(team.team_tag)}]</span></td>
       <td>${U().escapeHtml(team.status)}</td>
       <td>${(team.roster || []).length} / 8</td>
@@ -1070,6 +1242,60 @@
         players();
       }
     }));
+  }
+
+  function bindBulkTeamActions(requests, teams) {
+    if (U().qs("#bulkTeamRequests")) {
+      bindBulkSelection("bulkTeamRequests", "selectedTeamRequests");
+      U().qs("#bulkTeamRequestsApply").onclick = async () => {
+        const selected = new Set(checkedValues("selectedTeamRequests"));
+        const targets = requests.filter((request) => selected.has(request.request_id) && request.status === "pending");
+        const action = U().qs("#bulkTeamRequestsAction").value;
+        if (!targets.length || !["approve", "reject"].includes(action)) return U().setMessage("#bulkTeamRequestsMessage", "Select pending requests and an action.", "error");
+        if (!confirm(`${action} ${targets.length} team request(s)?`)) return;
+        try {
+          await runBulkItems(targets, async (request) => {
+            if (action === "approve") {
+              const { error: teamError } = await db().from("teams").update({ status: "approved", approved_by: me().id }).eq("team_id", request.team_id);
+              if (teamError) throw teamError;
+            }
+            const { error } = await db().from("team_approval_requests").update({ status: action === "approve" ? "approved" : "rejected", reviewed_by: me().id, reviewed_at: new Date().toISOString() }).eq("request_id", request.request_id);
+            if (error) throw error;
+            await logAction(`bulk_${action}_team`, request.team_id, { request_id: request.request_id });
+          });
+          players();
+        } catch (error) {
+          U().setMessage("#bulkTeamRequestsMessage", error.message, "error");
+        }
+      };
+    }
+    if (U().qs("#bulkTeams")) {
+      bindBulkSelection("bulkTeams", "selectedTeams");
+      U().qs("#bulkTeamsApply").onclick = async () => {
+        const selected = new Set(checkedValues("selectedTeams"));
+        const targets = teams.filter((team) => selected.has(team.team_id));
+        const action = U().qs("#bulkTeamsAction").value;
+        if (!targets.length || !action) return U().setMessage("#bulkTeamsMessage", "Select teams and an action.", "error");
+        if (action === "delete" && !canDeleteTeams()) return U().setMessage("#bulkTeamsMessage", "You cannot delete teams.", "error");
+        if (!confirm(`${action} ${targets.length} team(s)?`)) return;
+        try {
+          await runBulkItems(targets, async (team) => {
+            if (action === "delete") {
+              const { error } = await db().rpc("admin_delete_team", { target_team_id: team.team_id });
+              if (error) throw error;
+            } else {
+              const status = action === "approve" ? "approved" : action;
+              const { error } = await db().from("teams").update({ status, ...(status === "approved" ? { approved_by: me().id } : {}) }).eq("team_id", team.team_id);
+              if (error) throw error;
+            }
+            await logAction(action === "delete" ? "bulk_delete_team" : "bulk_update_team_status", team.team_id, { status: action });
+          });
+          players();
+        } catch (error) {
+          U().setMessage("#bulkTeamsMessage", error.message, "error");
+        }
+      };
+    }
   }
 
   function openTeamEditor(team, playersList, memberships = [], teams = []) {
@@ -1274,6 +1500,7 @@
             ? `team: ${targetTeam ? `${targetTeam.team_name} [${targetTeam.team_tag}]` : post.target_team_id || "unknown"}`
           : post.audience_type;
       return `<tr>
+        <td class="selection-cell"><input type="checkbox" name="selectedBroadcasts" value="${post.post_id}" aria-label="Select ${U().escapeHtml(post.title)}"></td>
         <td><strong>${U().escapeHtml(post.title)}</strong><br><span class="muted">${U().escapeHtml(author?.full_name || "Unknown")} - ${U().escapeHtml(post.author_role || "")}${tournament ? ` - ${U().escapeHtml(tournament.name)}` : ""}</span></td>
         <td>${U().escapeHtml(audience)}</td>
         <td>${post.is_pinned ? `<span class="pill warn">#${post.pin_order || "-"}</span>` : '<span class="muted">No</span>'}</td>
@@ -1284,7 +1511,7 @@
           ${canDeleteBroadcast(post) ? `<button class="secondary-button" type="button" data-delete-broadcast="${post.post_id}">Delete</button>` : ""}
         </div></td>
       </tr>`;
-    }).join("") || '<tr><td colspan="6" class="muted">No broadcasts match that search.</td></tr>';
+    }).join("") || '<tr><td colspan="7" class="muted">No broadcasts match that search.</td></tr>';
     return `<table>
       <caption class="table-caption">
         <div class="filter-grid dashboard-filter-bar">
@@ -1292,8 +1519,9 @@
           <label class="field"><select id="broadcastHistoryAudience"><option value="all">All audiences</option>${audienceTypes.map((type) => `<option value="${type}">${type}</option>`).join("")}</select><span>Audience</span></label>
           <label class="field"><select id="broadcastHistoryPin"><option value="all">Pinned and unpinned</option><option value="pinned">Pinned only</option><option value="unpinned">Unpinned only</option></select><span>Pin state</span></label>
         </div>
+        ${renderBulkBar({ id: "bulkBroadcasts", checkboxName: "selectedBroadcasts", actions: [["unpin", "Unpin selected"], ["delete", "Delete selected"]] })}
       </caption>
-      <thead><tr><th>Broadcast</th><th>Audience</th><th>Pin</th><th>Posted</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th class="selection-cell">Pick</th><th>Broadcast</th><th>Audience</th><th>Pin</th><th>Posted</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody id="broadcastHistoryRows">${rows(posts)}</tbody>
     </table>`;
   }
@@ -1325,6 +1553,7 @@
       });
       U().qs("#broadcastHistoryRows").innerHTML = renderBroadcastHistoryRows(filtered, profileMap, tournamentMap, teamsList);
       bindBroadcastActions(posts, tournamentsList, profiles, teamsList);
+      bindBulkSelection("bulkBroadcasts", "selectedBroadcasts");
     };
     U().qs("#broadcastHistorySearch")?.addEventListener("input", applyFilters);
     U().qs("#broadcastHistoryAudience")?.addEventListener("change", applyFilters);
@@ -1413,6 +1642,27 @@
   }
 
   function bindBroadcastActions(posts, tournamentsList, profiles, teamsList) {
+    bindBulkSelection("bulkBroadcasts", "selectedBroadcasts");
+    if (U().qs("#bulkBroadcastsApply")) U().qs("#bulkBroadcastsApply").onclick = async () => {
+      const selected = new Set(checkedValues("selectedBroadcasts"));
+      const targets = posts.filter((post) => selected.has(post.post_id));
+      const action = U().qs("#bulkBroadcastsAction").value;
+      if (!targets.length || !["unpin", "delete"].includes(action)) return U().setMessage("#bulkBroadcastsMessage", "Select broadcasts and an action.", "error");
+      if (!confirm(`${action} ${targets.length} broadcast(s)?`)) return;
+      try {
+        await runBulkItems(targets, async (post) => {
+          if (!canEditBroadcast(post) || (action === "delete" && !canDeleteBroadcast(post))) throw new Error(`You cannot manage "${post.title}".`);
+          const result = action === "delete"
+            ? await db().from("feed_posts").delete().eq("post_id", post.post_id)
+            : await db().from("feed_posts").update({ is_pinned: false, pin_order: null }).eq("post_id", post.post_id);
+          if (result.error) throw result.error;
+          await logAction(action === "delete" ? "bulk_delete_broadcast" : "bulk_unpin_broadcast", post.post_id, {});
+        });
+        broadcasts();
+      } catch (error) {
+        U().setMessage("#bulkBroadcastsMessage", error.message, "error");
+      }
+    };
     U().qsa("[data-edit-broadcast]").forEach((button) => button.addEventListener("click", () => openBroadcastEditor(posts.find((post) => post.post_id === button.dataset.editBroadcast), tournamentsList, profiles, teamsList)));
     U().qsa("[data-delete-broadcast]").forEach((button) => button.addEventListener("click", async () => {
       if (!confirm("Delete this broadcast?")) return;
@@ -1486,13 +1736,14 @@
     const registrationStats = summarizeRegistrationStats(registrationResult.data || []);
     U().qs("#dashContent").innerHTML = `
       ${canCreateTournaments() ? renderCreateTournamentPanel() : ""}
-      <section class="wide-panel"><h2>Tournaments</h2><div class="table-wrap">${renderTournamentTable(tournamentList, registrationStats)}</div></section>
+      <section class="wide-panel"><h2>Tournaments</h2>${canEditTournaments() ? renderBulkBar({ id: "bulkTournaments", checkboxName: "selectedTournaments", actions: tournamentStatuses.map((status) => [`status:${status}`, `Set ${status}`]).concat(canDeleteTournaments() ? [["delete", "Delete selected"]] : []) }) : ""}<div class="table-wrap">${renderTournamentTable(tournamentList, registrationStats)}</div></section>
       <section class="wide-panel">
         <div class="section-heading"><h2>Registrations</h2><span class="pill">${(registrationResult.data || []).length} tickets</span></div>
         <div class="filter-grid dashboard-filter-bar">
           <label class="field"><input id="registrationSearch" type="search" placeholder=" "><span>Search teams or tournaments</span></label>
           <label class="field"><select id="registrationStatusFilter"><option value="all">All registrations</option><option value="pending">Pending only</option><option value="approved">Approved only</option><option value="rejected">Rejected only</option></select><span>Status</span></label>
         </div>
+        ${canManageMatches() ? renderBulkBar({ id: "bulkRegistrations", checkboxName: "selectedRegistrations", actions: [["approve", "Approve selected"], ["reject", "Reject selected"]] }) : ""}
         <div id="registrationList" class="list-stack">${renderRegistrationList(registrationResult.data || [])}</div>
       </section>
       <section class="wide-panel"><h2>Tie Sheet</h2><div class="table-wrap">${renderMatchTable(matchResult.data || [])}</div></section>`;
@@ -1501,6 +1752,7 @@
     bindRegistrationActions();
     bindRegistrationFilters(registrationResult.data || []);
     bindMatchActions(matchResult.data || [], tournamentList, teamsList);
+    bindBulkTournamentActions(tournamentList, registrationResult.data || []);
   }
 
   function summarizeRegistrationStats(registrations) {
@@ -1527,10 +1779,11 @@
   }
 
   function renderTournamentTable(tournamentList, registrationStats = {}) {
-    return `<table><thead><tr><th>Name</th><th>Status</th><th>Capacity</th><th>Tickets</th><th>Start</th><th>Actions</th></tr></thead><tbody>
+    return `<table><thead><tr><th class="selection-cell">Pick</th><th>Name</th><th>Status</th><th>Capacity</th><th>Tickets</th><th>Start</th><th>Actions</th></tr></thead><tbody>
       ${tournamentList.map((t) => {
         const stats = registrationStats[t.tournament_id] || { total: 0, pending: 0, approved: 0, rejected: 0 };
         return `<tr>
+        <td class="selection-cell"><input type="checkbox" name="selectedTournaments" value="${t.tournament_id}" aria-label="Select ${U().escapeHtml(t.name)}"></td>
         <td><a href="tournament.html?id=${t.tournament_id}">${U().escapeHtml(t.name)}</a><br><span class="muted">${U().escapeHtml(t.game || "")}</span></td>
         <td>${U().escapeHtml(t.status)}</td>
         <td>${t.team_capacity}</td>
@@ -1547,7 +1800,9 @@
   }
 
   function renderRegistration(registration) {
-    return `<div class="item-card">
+    return `<div class="item-card ${registration.status === "pending" && canManageMatches() ? "selectable-card" : ""}">
+      ${registration.status === "pending" && canManageMatches() ? `<input type="checkbox" name="selectedRegistrations" value="${registration.registration_id}" aria-label="Select ${U().escapeHtml(registration.teams?.team_name || registration.team_id)} registration">` : ""}
+      <div>
       <strong>${U().escapeHtml(registration.teams?.team_name || registration.team_id)}</strong>
       <p class="muted">${U().escapeHtml(registration.tournaments?.name || registration.tournament_id)} - ${U().escapeHtml(registration.status)}</p>
       ${canManageMatches() && registration.status === "pending" ? `
@@ -1555,6 +1810,7 @@
           <button class="primary-button" type="button" data-approve-registration="${registration.registration_id}" data-tournament="${registration.tournament_id}">Approve</button>
           <button class="secondary-button" type="button" data-reject-registration="${registration.registration_id}">Reject</button>
         </div>` : ""}
+      </div>
     </div>`;
   }
 
@@ -1580,6 +1836,7 @@
       });
       U().qs("#registrationList").innerHTML = renderRegistrationList(filtered);
       bindRegistrationActions();
+      bindBulkSelection("bulkRegistrations", "selectedRegistrations");
     };
     U().qs("#registrationSearch")?.addEventListener("input", applyFilters);
     U().qs("#registrationStatusFilter")?.addEventListener("change", applyFilters);
@@ -1650,6 +1907,59 @@
         tournaments();
       }
     }));
+  }
+
+  function bindBulkTournamentActions(tournamentList, registrations) {
+    if (U().qs("#bulkTournaments")) {
+      bindBulkSelection("bulkTournaments", "selectedTournaments");
+      U().qs("#bulkTournamentsApply").onclick = async () => {
+        const selected = new Set(checkedValues("selectedTournaments"));
+        const targets = tournamentList.filter((tournament) => selected.has(tournament.tournament_id));
+        const action = U().qs("#bulkTournamentsAction").value;
+        if (!targets.length || !action) return U().setMessage("#bulkTournamentsMessage", "Select tournaments and an action.", "error");
+        if (action === "delete" && !canDeleteTournaments()) return;
+        if (!confirm(`${action} ${targets.length} tournament(s)?`)) return;
+        try {
+          await runBulkItems(targets, async (tournament) => {
+            const result = action === "delete"
+              ? await db().from("tournaments").delete().eq("tournament_id", tournament.tournament_id)
+              : await db().from("tournaments").update({ status: action.replace("status:", "") }).eq("tournament_id", tournament.tournament_id);
+            if (result.error) throw result.error;
+            await logAction(action === "delete" ? "bulk_delete_tournament" : "bulk_update_tournament_status", tournament.tournament_id, { action });
+          });
+          tournaments();
+        } catch (error) {
+          U().setMessage("#bulkTournamentsMessage", error.message, "error");
+        }
+      };
+    }
+    if (U().qs("#bulkRegistrations")) {
+      bindBulkSelection("bulkRegistrations", "selectedRegistrations");
+      U().qs("#bulkRegistrationsApply").onclick = async () => {
+        const selected = new Set(checkedValues("selectedRegistrations"));
+        const targets = registrations.filter((registration) => selected.has(registration.registration_id) && registration.status === "pending");
+        const action = U().qs("#bulkRegistrationsAction").value;
+        if (!targets.length || !["approve", "reject"].includes(action)) return U().setMessage("#bulkRegistrationsMessage", "Select pending registrations and an action.", "error");
+        if (!confirm(`${action} ${targets.length} tournament registration(s)?`)) return;
+        try {
+          await runBulkItems(targets, async (registration) => {
+            if (action === "approve") {
+              const { data: tournament, error: tournamentError } = await db().from("tournaments").select("team_capacity").eq("tournament_id", registration.tournament_id).single();
+              if (tournamentError) throw tournamentError;
+              const { count, error: countError } = await db().from("tournament_registrations").select("*", { count: "exact", head: true }).eq("tournament_id", registration.tournament_id).eq("status", "approved");
+              if (countError) throw countError;
+              if (Number(count || 0) >= Number(tournament.team_capacity || 0)) throw new Error("A selected tournament is already full.");
+            }
+            const { error } = await db().from("tournament_registrations").update({ status: action === "approve" ? "approved" : "rejected", reviewed_by: me().id, reviewed_at: new Date().toISOString() }).eq("registration_id", registration.registration_id);
+            if (error) throw error;
+            await logAction(`bulk_${action}_registration`, registration.registration_id, { tournament_id: registration.tournament_id });
+          });
+          tournaments();
+        } catch (error) {
+          U().setMessage("#bulkRegistrationsMessage", error.message, "error");
+        }
+      };
+    }
   }
 
   function openTournamentEditor(tournament) {
@@ -2064,113 +2374,6 @@
       db().from("audit_logs").select("*, profiles!admin_id(id, full_name, username, role, staff_role, staff_roles)").order("created_at", { ascending: false }).limit(250),
       db().from("profiles").select("id, full_name, username, role, staff_role, staff_roles").limit(500)
     ]);
-
-    if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
-
-    const actorMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
-    const currentRole = staffRolesFor(me());
-    const isSuperAdmin = currentRole.includes("superadmin");
-
-    const baseLogs = (data || []).filter((log) => {
-      const actor = actorMap[log.admin_id] || {};
-      if (!isSuperAdmin && hasRealStaffRole(actor, "superadmin")) return false;
-      const department = actionDepartment(log.action);
-      if (!isSuperAdmin) {
-        if (currentRole.includes("useradmin") || currentRole.includes("usermod")) return department === "User Management";
-        if (currentRole.includes("playeradmin") || currentRole.includes("playermod")) return department === "Player Management";
-        if (currentRole.includes("tournamentadmin") || currentRole.includes("tournamentmod")) return department === "Tournament";
-      }
-      return true;
-    });
-
-    function renderRows(logs) {
-      const teamActivity = logs.filter((log) => /team|player|member|approval/.test(String(log.action).toLowerCase()));
-      const actorSummary = [...new Set(logs.map((log) => actorMap[log.admin_id]?.full_name || "Unknown"))].slice(0, 8);
-      root.innerHTML = `
-        <section class="card-grid" style="margin-bottom:16px;">
-          <article class="item-card"><strong>${logs.length}</strong><span>Visible audit entries</span></article>
-          <article class="item-card"><strong>${teamActivity.length}</strong><span>Team activity items</span></article>
-          <article class="item-card"><strong>${actorSummary.length}</strong><span>Visible actors</span></article>
-        </section>
-        <section class="wide-panel" style="margin-bottom:16px;">
-          <div class="section-heading"><h2>Audit Filters</h2><span class="pill good">${isSuperAdmin ? "Superadmin view" : "Scoped view"}</span></div>
-          <div class="filter-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end;">
-            <label class="field"><input id="auditSearch" type="search" placeholder=" "><span>Search</span></label>
-            <label class="field"><select id="auditDepartmentFilter"><option value="all">All departments</option><option value="User">User</option><option value="Player">Player</option><option value="Tournament">Tournament</option><option value="General">General</option></select><span>Department</span></label>
-            <label class="field"><select id="auditActorFilter"><option value="all">All actors</option>${[...new Set(baseLogs.map((log) => actorMap[log.admin_id]?.full_name || actorMap[log.admin_id]?.username || "Unknown"))].map((name) => `<option value="${U().escapeHtml(name)}">${U().escapeHtml(name)}</option>`).join("")}</select><span>Actor</span></label>
-          </div>
-          <div class="pill-row" style="margin-top:10px;">
-            <span class="pill">Visible: ${isSuperAdmin ? "All departments" : "Department scoped"}</span>
-            <span class="pill">Superadmin activity: ${isSuperAdmin ? "Visible" : "Hidden"}</span>
-            <span class="pill">Team activity: ${teamActivity.length}</span>
-          </div>
-        </section>
-        <section class="wide-panel" style="margin-bottom:16px;">
-          <div class="section-heading"><h2>Team Activity</h2><span class="pill warn">Department tracking</span></div>
-          <div class="list-stack">${teamActivity.slice(0, 8).map((log) => {
-            const actor = actorMap[log.admin_id] || {};
-            return `<article class="item-card"><strong>${U().escapeHtml(actionLabel(log.action))}</strong><p class="muted">${U().escapeHtml(actor.full_name || "Unknown actor")} · ${U().formatDate(log.created_at)}</p><p>${U().escapeHtml(JSON.stringify(log.details || {}).slice(0, 160))}</p></article>`;
-          }).join("") || '<p class="muted">No team activity in the current filter.</p>'}</div>
-        </section>
-        <section class="table-wrap"><table><thead><tr><th>Actor</th><th>Department</th><th>Action</th><th>Target</th><th>Details</th><th>Date</th></tr></thead><tbody id="auditRows">${logs.map((log) => {
-          const actor = actorMap[log.admin_id] || {};
-          const staffRoles = [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean);
-          return `<tr>
-            <td>${U().escapeHtml(actor.full_name || actor.username || "Unknown")}<br><span class="muted">${U().escapeHtml(staffRoles.join(", ") || actor.role || "user")}</span></td>
-            <td>${U().escapeHtml(actionDepartment(log.action))}</td>
-            <td>${U().escapeHtml(actionLabel(log.action))}</td>
-            <td>${U().escapeHtml(log.target_id || "-")}</td>
-            <td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td>
-            <td>${U().formatDate(log.created_at)}</td>
-          </tr>`;
-        }).join("")}</tbody></table></section>`;
-
-      const searchInput = U().qs("#auditSearch");
-      const departmentFilter = U().qs("#auditDepartmentFilter");
-      const actorFilter = U().qs("#auditActorFilter");
-      const applyFilters = () => {
-        const query = (searchInput?.value || "").toLowerCase();
-        const department = departmentFilter?.value || "all";
-        const actor = actorFilter?.value || "all";
-        const filtered = baseLogs.filter((log) => {
-          const actorName = actorMap[log.admin_id]?.full_name || actorMap[log.admin_id]?.username || "Unknown";
-          const text = `${actionLabel(log.action)} ${actorName} ${JSON.stringify(log.details || "")} ${log.target_id || ""}`.toLowerCase();
-          const matchesQuery = !query || text.includes(query);
-          const matchesDepartment = department === "all" || actionDepartment(log.action) === department;
-          const matchesActor = actor === "all" || actorName === actor;
-          return matchesQuery && matchesDepartment && matchesActor;
-        });
-        const rows = U().qs("#auditRows");
-        if (!rows) return;
-        rows.innerHTML = filtered.map((log) => {
-          const actor = actorMap[log.admin_id] || {};
-          const staffRoles = [actor.staff_role, ...(Array.isArray(actor.staff_roles) ? actor.staff_roles : [])].filter(Boolean);
-          return `<tr>
-            <td>${U().escapeHtml(actor.full_name || actor.username || "Unknown")}<br><span class="muted">${U().escapeHtml(staffRoles.join(", ") || actor.role || "user")}</span></td>
-            <td>${U().escapeHtml(actionDepartment(log.action))}</td>
-            <td>${U().escapeHtml(actionLabel(log.action))}</td>
-            <td>${U().escapeHtml(log.target_id || "-")}</td>
-            <td><code>${U().escapeHtml(JSON.stringify(log.details || {}))}</code></td>
-            <td>${U().formatDate(log.created_at)}</td>
-          </tr>`;
-        }).join("") || '<tr><td colspan="6"><p class="muted">No audit entries match the current filters.</p></td></tr>';
-      };
-      searchInput?.addEventListener("input", applyFilters);
-      departmentFilter?.addEventListener("change", applyFilters);
-      actorFilter?.addEventListener("change", applyFilters);
-    }
-
-    renderRows(baseLogs);
-  }
-
-  async function audit() {
-    const root = U().qs("#dashContent");
-    root.innerHTML = '<p class="muted">Loading audit activity...</p>';
-
-    const [{ data, error }, { data: profiles }] = await Promise.all([
-      db().from("audit_logs").select("*, profiles!admin_id(id, full_name, username, role, staff_role, staff_roles)").order("created_at", { ascending: false }).limit(250),
-      db().from("profiles").select("id, full_name, username, role, staff_role, staff_roles").limit(500)
-    ]);
     if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
 
     const actorMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
@@ -2298,7 +2501,7 @@
   }
 
   async function activity() {
-    const { data } = await db().from("audit_logs").select("*").order("created_at", { ascending: false }).limit(8);
+    const { data } = await db().from("audit_logs").select("*, profiles!admin_id(id,full_name,username,role,staff_role,staff_roles)").order("created_at", { ascending: false }).limit(8);
     const logs = data || [];
     const counts = logs.reduce((memo, log) => {
       const department = actionDepartment(log.action);
@@ -2316,13 +2519,24 @@
         <span><strong>${counts.Tournament || 0}</strong><small>event</small></span>
       </div>
       <div class="activity-timeline">${logs.map((log) => `
-        <article class="activity-item">
+        <${canViewActivityDetail(log) ? "button" : "article"} class="activity-item" ${canViewActivityDetail(log) ? `type="button" data-activity-detail="${log.log_id}"` : ""}>
           <span class="activity-dot"></span>
           <strong>${U().escapeHtml(actionLabel(log.action))}</strong>
-          <p>${U().escapeHtml(actionDepartment(log.action))}</p>
+          <p>${U().escapeHtml(actionDepartment(log.action))}${canViewActivityDetail(log) ? " - open details" : ""}</p>
           <small>${U().formatDate(log.created_at)}</small>
-        </article>
+        </${canViewActivityDetail(log) ? "button" : "article"}>
       `).join("") || '<p class="muted">No activity yet.</p>'}</div>`;
+    U().qsa("[data-activity-detail]").forEach((button) => button.onclick = () => {
+      const log = logs.find((entry) => String(entry.log_id) === String(button.dataset.activityDetail));
+      if (!log || !canViewActivityDetail(log)) return;
+      const actor = log.profiles || {};
+      const actorRoles = rawStaffRolesFor(actor);
+      U().openModal("Activity Details", `<section class="detail-grid">
+        <div class="mini-card"><div class="section-heading"><strong>${U().escapeHtml(actionLabel(log.action))}</strong><span class="pill">${U().escapeHtml(actionDepartment(log.action))}</span></div>
+        <dl class="detail-list"><div><dt>Who</dt><dd>${U().escapeHtml(actor.full_name || actor.username || "Unknown actor")}</dd></div><div><dt>Role</dt><dd>${U().escapeHtml(actorRoles.join(", ") || actor.role || "user")}</dd></div><div><dt>When</dt><dd>${new Date(log.created_at).toLocaleString()}</dd></div><div><dt>Target</dt><dd>${U().escapeHtml(log.target_id || "-")}</dd></div></dl></div>
+        <pre class="code-block">${U().escapeHtml(JSON.stringify(log.details || {}, null, 2))}</pre>
+      </section>`);
+    });
   }
 
   function updatePreviewBadge() {
@@ -2361,7 +2575,6 @@
       if (value) localStorage.setItem(previewRoleStorageKey, value);
       else localStorage.removeItem(previewRoleStorageKey);
       renderSidebar();
-      loadModule(activeModule);
       updatePreviewBadge();
     });
 
@@ -2369,12 +2582,11 @@
       localStorage.removeItem(previewRoleStorageKey);
       previewSelect.value = "";
       renderSidebar();
-      loadModule(activeModule);
       updatePreviewBadge();
     });
   }
 
-  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+  window.TPUtils.onAuthReady(() => {
     if (document.body.dataset.page !== "dashboard" || !window.currentProfile) return;
     renderSidebar();
     activity();
@@ -2382,5 +2594,5 @@
     setupPreviewControls();
     U().qs("#switchUserView")?.addEventListener("click", () => window.open("feed.html", "_blank"));
     U().qs("#staffLogout")?.addEventListener("click", () => window.TPAuth.logout());
-  }, 350));
+  });
 })();

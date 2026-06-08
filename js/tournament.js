@@ -376,7 +376,8 @@
   async function loadTournamentList() {
     const root = U().qs("#tournamentList");
     if (!root) return;
-    const { data, error } = await db().from("tournaments").select("*").order("start_date", { ascending: true });
+    root.innerHTML = U().spinner();
+    const { data, error } = await db().from("tournaments").select("tournament_id,name,description,team_capacity,start_date,status").order("start_date", { ascending: true });
     if (error) return root.innerHTML = `<p class="message error">${U().escapeHtml(error.message)}</p>`;
     root.innerHTML = (data || []).map((t) => `
       <article class="item-card">
@@ -394,6 +395,7 @@
     const arena = U().qs("#phaseArena");
     const standingsRoot = U().qs("#tournamentStandings");
     if (!detail || !arena || !standingsRoot || !id) return;
+    detail.innerHTML = U().spinner();
     const [tournamentResult, matchesResult, registrationsResult, groupsResult] = await Promise.all([
       db().from("tournaments").select("*").eq("tournament_id", id).single(),
       db().from("matches").select("*").eq("tournament_id", id).order("scheduled_start_utc", { ascending: true }).order("bracket_position", { ascending: true }),
@@ -402,6 +404,7 @@
     ]);
     if (tournamentResult.error) return detail.innerHTML = `<p class="message error">${U().escapeHtml(tournamentResult.error.message)}</p>`;
     const tournament = tournamentResult.data;
+    U().updateDocumentMeta(tournament.name, tournament.description || `${tournament.name} tournament details, matches, and standings.`);
     const matches = matchesResult.data || [];
     const approvedTeamIds = (registrationsResult.data || []).filter((row) => row.status === "approved").map((row) => row.team_id);
     const matchTeamIds = matches.flatMap((match) => [match.team_a_id, match.team_b_id]).filter(Boolean);
@@ -487,6 +490,7 @@
       return teams.some((team) => (team.roster || []).some((member) => member.player_id === profileId));
     };
     const check = () => {
+      if (document.hidden) return;
       const now = Date.now();
       matches.filter(isMyMatch).forEach((match) => {
         if (!match.scheduled_start_utc) return;
@@ -511,7 +515,7 @@
   function startTournamentListRealtime() {
     if (tournamentListRealtime) return;
     tournamentListRealtime = true;
-    db().channel("tournaments:list").on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, loadTournamentList).on("postgres_changes", { event: "*", schema: "public", table: "matches" }, loadTournamentList).subscribe();
+    db().channel("tournaments:list").on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, loadTournamentList).subscribe();
   }
 
   function startTournamentDetailRealtime(id) {
@@ -525,11 +529,11 @@
       .subscribe();
   }
 
-  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+  window.TPUtils.onAuthReady(() => {
     if (document.body.dataset.page === "tournaments") {
       loadTournamentList();
       startTournamentListRealtime();
     }
     if (document.body.dataset.page === "tournament") loadTournamentDetail();
-  }, 250));
+  });
 })();

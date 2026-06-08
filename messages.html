@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tournament Details | Tournament Players Nepal</title>
-  <meta name="description" content="Follow tournament phases, matches, brackets, and standings on Tournament Players Nepal.">
+  <title>Messages | Tournament Players Nepal</title>
+  <meta name="description" content="Chat directly with Tournament Players Nepal members.">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#0066cc">
   <meta name="color-scheme" content="light dark">
@@ -15,26 +15,22 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://zxrqfnrfshnvrnvuujmz.supabase.co" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="css/bracket.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
   <script defer src="js/auth.js"></script>
   <script defer src="js/notifications.js"></script>
   <script defer src="js/messages.js"></script>
-  <script defer src="js/bracketGenerator.js"></script>
-  <script defer src="js/tournament.js"></script>
 </head>
-<body data-page="tournament">
+<body data-page="messages">
   <header class="top-nav"></header>
   <main class="page-shell">
-    <section id="tournamentDetail" class="wide-panel" aria-live="polite"></section>
-    <section id="phaseArena" class="tournament-arena" aria-live="polite"></section>
-    <section id="tournamentStandings" class="wide-panel" aria-live="polite"></section>
+    <section class="wide-panel messenger-panel">
+      <div class="section-heading"><div><p class="eyebrow">Direct chat</p><h1>Messages</h1></div><span class="pill good">Live</span></div>
+      <div id="messengerRoot" aria-live="polite"></div>
+    </section>
   </main>
 </body>
 </html>

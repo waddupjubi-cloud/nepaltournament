@@ -1,0 +1,18 @@
+{
+  "name": "Tournament Players Nepal",
+  "short_name": "TP Nepal",
+  "description": "A live esports platform for Nepal's tournament players, teams, brackets, and staff.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#09070a",
+  "theme_color": "#0066cc",
+  "icons": [
+    {
+      "src": "assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

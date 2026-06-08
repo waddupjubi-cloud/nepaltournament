@@ -3,10 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tournament Players | Teams</title>
+  <title>Esports Teams | Tournament Players Nepal</title>
+  <meta name="description" content="Browse and manage esports teams in the Tournament Players Nepal community.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0066cc">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://zxrqfnrfshnvrnvuujmz.supabase.co" crossorigin>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0"></script>
   <script defer src="js/config.js"></script>
   <script defer src="js/utils.js"></script>
   <script defer src="js/supabaseClient.js"></script>
@@ -22,7 +32,7 @@
       <h1>Teams</h1>
       <a class="primary-button" href="create-team.html">Create team</a>
     </div>
-    <section id="teamList" class="card-grid"></section>
+    <section id="teamList" class="card-grid" aria-live="polite"></section>
   </main>
 </body>
 </html>

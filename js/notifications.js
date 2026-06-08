@@ -1,4 +1,6 @@
 (function () {
+  let notificationChannel = null;
+
   async function initNotifications() {
     const U = window.TPUtils;
     const profile = window.currentProfile;
@@ -15,7 +17,8 @@
       badge.classList.toggle("hidden", !count);
     }
     await refresh();
-    window.tpSupabase
+    if (notificationChannel) return;
+    notificationChannel = window.tpSupabase
       .channel(`notifications:${profile.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` }, () => {
         refresh();
@@ -29,7 +32,7 @@
     if (!root || !window.currentProfile) return;
     const { data, error } = await window.tpSupabase
       .from("notifications")
-      .select("*")
+      .select("notification_id,title,message,link,is_read,created_at")
       .eq("user_id", window.currentProfile.id)
       .order("created_at", { ascending: false })
       .limit(80);
@@ -41,7 +44,7 @@
           <p>${U.escapeHtml(item.message || "")}</p>
           <small class="muted">${new Date(item.created_at).toLocaleString()}</small>
         </div>
-        ${item.link ? `<a class="secondary-button compact-button" href="${U.escapeHtml(item.link)}">Open</a>` : ""}
+        ${item.link ? `<a class="secondary-button compact-button" href="${U.escapeHtml(U.safeHref(item.link))}">Open</a>` : ""}
       </article>`).join("") || '<p class="muted">No alerts yet.</p>';
   }
   async function markAlertsRead() {
@@ -50,10 +53,10 @@
     renderAlertList();
     initNotifications();
   }
-  document.addEventListener("DOMContentLoaded", () => setTimeout(initNotifications, 200));
-  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+  window.TPUtils.onAuthReady(() => {
+    initNotifications();
     renderAlertList();
     window.TPUtils.qs("#markAlertsRead")?.addEventListener("click", markAlertsRead);
-  }, 260));
+  });
   window.TPNotifications = { initNotifications, renderAlertList };
 })();

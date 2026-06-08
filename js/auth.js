@@ -1,6 +1,6 @@
 (function () {
   const db = () => window.tpSupabase;
-  const userPages = ["feed", "profile", "teams", "team", "create-team", "tournaments", "tournament"];
+  const userPages = ["feed", "profile", "alerts", "messages", "teams", "team", "create-team", "tournaments", "tournament"];
 
   async function getSession() {
     const { data, error } = await db().auth.getSession();
@@ -29,7 +29,9 @@
     window.currentProfile = profile;
     window.TPUtils.renderNav(profile);
     startProfileRealtime(profile.id);
-    return { session, profile };
+    const detail = { session, profile };
+    document.dispatchEvent(new CustomEvent("tp:auth-ready", { detail }));
+    return detail;
   }
 
   async function requireStaff() {
@@ -47,7 +49,9 @@
     window.currentSession = session;
     window.currentProfile = profile;
     startProfileRealtime(profile.id);
-    return { session, profile };
+    const detail = { session, profile };
+    document.dispatchEvent(new CustomEvent("tp:auth-ready", { detail }));
+    return detail;
   }
 
   let profileRealtimeId = null;

@@ -52,6 +52,14 @@ python -m http.server 8080
 
 Then open `http://localhost:8080`.
 
+Before deploying, run the project-wide validation:
+
+```powershell
+npm run check
+```
+
+This verifies every HTML page, local asset reference, metadata block, manifest, and JavaScript file.
+
 ## 4. Login Flow
 
 - Normal users use [index.html](index.html).
@@ -64,7 +72,7 @@ Then open `http://localhost:8080`.
 
 This project is mostly static frontend code. Real Auth user creation and password updates go through the `admin-users` Supabase Edge Function. Authorization uses `profiles.staff_role` for backward compatibility plus `profiles.staff_roles` for multiple staff permissions.
 
-## 6. Import Temp Teams And Staff
+## 6. Import Temporary Staff
 
 Temporary seed JSON lives in:
 
@@ -76,10 +84,11 @@ This creates:
 
 - 3 admins: UserAdmin, PlayerAdmin, TournamentAdmin
 - 3 moderators: UserMod, PlayerMod, TournamentMod
-- 8 approved teams
-- 64 player accounts, with each team having EXP, JG, GD, MD, RM, Coach, SB1, and SB2 roles
+- No regular users, players, or teams. They were intentionally removed while the management workflow is being prepared.
 
-To import it locally, you need a Supabase backend key. Do not put this key in `js/config.js`.
+To import the staff-only seed locally, you need a Supabase backend key. Do not put this key in `js/config.js`.
+
+To remove nonstaff accounts from an existing Supabase project, carefully review and run [supabase/remove-nonstaff-users.sql](supabase/remove-nonstaff-users.sql) in the Supabase SQL Editor. It preserves accounts with a superadmin, admin, or moderator staff role and is intentionally destructive.
 
 PowerShell:
 
@@ -158,6 +167,8 @@ npx supabase functions deploy admin-users --project-ref zxrqfnrfshnvrnvuujmz --u
 
 If the dashboard says `Failed to send a request to the Edge Function`, the function is not deployed yet. In the current project, the endpoint should be:
 
+If user deletion still fails in Supabase because of stale foreign keys, run [supabase/fix-user-delete-cascades.sql](supabase/fix-user-delete-cascades.sql) and [supabase/fix-feed-broadcast-schema.sql](supabase/fix-feed-broadcast-schema.sql) in the SQL editor before retrying.
+
 ```text
 https://zxrqfnrfshnvrnvuujmz.supabase.co/functions/v1/admin-users
 ```
@@ -175,13 +186,17 @@ Then [.github/workflows/deploy-supabase-functions.yml](.github/workflows/deploy-
 ## File Map
 
 - `index.html`, `staff.html`: auth interfaces.
-- `feed.html`, `profile.html`: user experience.
+- `feed.html`, `profile.html`, `alerts.html`, `messages.html`: user experience.
 - `teams.html`, `create-team.html`, `team.html`: team workflows.
 - `tournaments.html`, `tournament.html`: tournament browsing and brackets.
-- `dashboard.html`: role-based staff dashboard.
+- `dashboard.html`, `broadcasts.html`, `user-management.html`, `player-management.html`, `tournament-management.html`, `audit-logs.html`: role-based staff dashboard pages.
 - `css/styles.css`, `css/bracket.css`: themes, responsive layout, bracket UI.
 - `js/*.js`: Supabase client, auth, pages, notifications, messages, bracket generation.
+- `assets/favicon.svg`, `site.webmanifest`, `robots.txt`: brand icon, install metadata, and crawler rules.
+- `scripts/validate-project.mjs`: zero-dependency project validation used by `npm run check`.
 - `data/*.json`: temporary seed users, teams, and feed posts.
 - `scripts/import-temp-data.mjs`: imports temporary JSON into Supabase.
 - `supabase/functions/admin-users`: Superadmin-only Auth user creation/deletion/password reset.
 - `supabase/schema.sql`, `supabase/seed.sql`: database setup.
+- `supabase/remove-nonstaff-users.sql`: destructive one-time cleanup that keeps staff accounts only.
+- `UPDATES.md`: dated product and engineering update log.

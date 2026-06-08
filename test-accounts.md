@@ -24,4 +24,4 @@ These are created by `npm run import:temp`.
 | PlayerMod | `meera.playermod@tournament.test` | `meera1` | `MeeraPlayerMod#2026` | Meera Rai |
 | TournamentMod | `kabir.tournamentmod@tournament.test` | `kabir1` | `KabirTournamentMod#2026` | Kabir Thapa |
 
-Team/player accounts are listed in [data/temp-users.json](data/temp-users.json).
+The staff-only import accounts are listed in [data/temp-users.json](data/temp-users.json).
